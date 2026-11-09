@@ -1,0 +1,27 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/*.test.mjs
+      - name: Manifest is valid JSON with the required keys
+        run: |
+          node -e '
+            const m = JSON.parse(require("fs").readFileSync("manifest.json", "utf8"));
+            for (const k of ["schemaVersion", "id", "name", "version", "kinds", "entryPoints"])
+              if (!(k in m)) { console.error("manifest.json is missing " + k); process.exit(1) }
+            if (m.id.startsWith("omarchy.")) { console.error("omarchy.* ids are reserved"); process.exit(1) }
+          '

@@ -21,6 +21,18 @@ omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
   leaves your computer.
 - **Times** are shown in your own time zone.
 
+## Dependencies and network
+
+Everything it needs comes with Omarchy: `curl` and `bash` to fetch, `omarchy-launch-browser` to
+open links, and `omarchy-bar` to save the settings you change in the panel. It makes two kinds of
+request, both plain HTTPS GETs:
+
+- `raw.githubusercontent.com/omacom/omarchy-site/master/src/data/meetups.json`, omarchy.org's
+  meetup list, at most every six hours
+- `geo.omarchy.org`, only when no Weather location is set, at most once a day
+
+Both answers are read as JSON and nothing downloaded is ever run.
+
 ## Settings
 
 **Distance** and **Look ahead** are at the bottom of the widget's list: click to step up through

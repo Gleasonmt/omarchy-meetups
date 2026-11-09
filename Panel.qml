@@ -222,7 +222,7 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
     dimmed: root.next === null
     labelText: root.bar && root.bar.vertical ? "" : root.barLabel
     slotSize: labelText !== "" ? Style.bar.iconSlot + labelMetrics.advanceWidth + Style.space(6) : Style.bar.iconSlot
-    tooltipText: root.next ? root.next.title : "No Omarchy meetups within " + root.radius + " " + root.unit + " in the next " + root.days + " days"
+    tooltipText: root.next ? root.next.title + "\n" + Model.detailLine(root.next, root.unit) : "No Omarchy meetups within " + root.radius + " " + root.unit + " in the next " + root.days + " days"
     onPressed: function(b) {
       if (b === Qt.MiddleButton) root.refresh(true)
       else root.toggle()

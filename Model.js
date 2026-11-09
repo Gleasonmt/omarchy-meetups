@@ -142,15 +142,17 @@ function formatDate(ms) {
   return DAYS[d.getDay()] + " " + MONTHS[d.getMonth()] + " " + d.getDate()
 }
 
-// Short form for the bar: "Now", "Today 6 PM", "Tomorrow", "Dec 7".
+// Short form for the bar: how far away the meetup is, never a clock time, so
+// it can't be mistaken for the bar's clock. "Now", "Tonight" (or "Today" for
+// one before 5 PM), "Tomorrow", "in 3 days", "in 4 wks".
 function barLabel(meetup, now) {
   if (!meetup) return ""
   if (meetup.start <= now) return "Now"
   var days = daysUntil(meetup.start, now)
-  if (days === 0) return "Today " + formatTime(meetup.start)
+  if (days === 0) return new Date(meetup.start).getHours() >= 17 ? "Tonight" : "Today"
   if (days === 1) return "Tomorrow"
-  var d = new Date(meetup.start)
-  return MONTHS[d.getMonth()] + " " + d.getDate()
+  if (days < 14) return "in " + days + " days"
+  return "in " + Math.round(days / 7) + " wks"
 }
 
 // One line under a meetup's title: "Mon Nov 9 · 6 PM · Frisco · 12 mi".

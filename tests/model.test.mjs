@@ -80,12 +80,15 @@ test("no location means only online meetups can show", () => {
   assert.deepEqual(plain(M.upcoming(events, null, 100, "mi", true, now).map(e => e.id)), ["evt-web"])
 })
 
-test("tonight's 6 PM Central meetup, stored as Nov 10 UTC, shows as today in local time", () => {
+test("tonight's 6 PM Central meetup, stored as Nov 10 UTC, is tonight in local time", () => {
   const meetup = M.upcoming(M.parseFeed(feed([dfw])).events, carrollton, 50, "mi", false, Date.parse("2026-11-09T15:00:00Z"))[0]
-  assert.equal(M.barLabel(meetup, Date.parse("2026-11-09T15:00:00Z")), "Today 6 PM")
+  assert.equal(M.barLabel(meetup, Date.parse("2026-11-09T15:00:00Z")), "Tonight")
   assert.equal(M.barLabel(meetup, Date.parse("2026-11-08T15:00:00Z")), "Tomorrow")
-  assert.equal(M.barLabel(meetup, Date.parse("2026-11-01T15:00:00Z")), "Nov 9")
+  assert.equal(M.barLabel(meetup, Date.parse("2026-11-06T15:00:00Z")), "in 3 days")
+  assert.equal(M.barLabel(meetup, Date.parse("2026-10-12T15:00:00Z")), "in 4 wks")
   assert.equal(M.barLabel(meetup, Date.parse("2026-11-10T00:30:00Z")), "Now")
+  const lunch = { ...meetup, start: Date.parse("2026-11-09T18:00:00Z") }
+  assert.equal(M.barLabel(lunch, Date.parse("2026-11-09T15:00:00Z")), "Today", "a noon meetup isn't tonight")
   assert.equal(M.detailLine(meetup, "mi"), "Mon Nov 9 · 6 PM · Frisco · 14 mi")
 })
 

@@ -23,7 +23,15 @@ omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
 
 ## Settings
 
-Setup › Bar, or inline on the widget's entry in `~/.config/omarchy/shell.json`:
+Change them with `omarchy bar set`; the widget updates right away:
+
+```bash
+omarchy bar set gleasonmt.meetups radius 150   # distance
+omarchy bar set gleasonmt.meetups days 30      # how far ahead
+omarchy bar set gleasonmt.meetups unit km
+```
+
+They're stored on the widget's entry in `~/.config/omarchy/shell.json`, which you can also edit by hand:
 
 | key | default | |
 |---|---|---|

@@ -163,3 +163,15 @@ function detailLine(meetup, unit) {
   }
   return parts.join(" · ")
 }
+
+// The preset after (direction 1) or before (-1) the current value, wrapping
+// around. A value between presets steps to the nearest one that way.
+function cyclePreset(current, presets, direction) {
+  var v = Number(current)
+  if (direction < 0) {
+    for (var i = presets.length - 1; i >= 0; i--) if (presets[i] < v) return presets[i]
+    return presets[presets.length - 1]
+  }
+  for (var j = 0; j < presets.length; j++) if (presets[j] > v) return presets[j]
+  return presets[0]
+}

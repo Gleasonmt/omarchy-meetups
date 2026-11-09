@@ -103,3 +103,13 @@ test("only meetups starting within the look-ahead window are listed", () => {
   assert.deepEqual(plain(M.upcoming(events, carrollton, 300, "mi", false, now, 14).map(e => e.id)), ["evt-dfw"])
   assert.deepEqual(plain(M.upcoming(events, carrollton, 300, "mi", false, now).map(e => e.id)), ["evt-dfw", "evt-atx"], "defaults to 90 days")
 })
+
+test("cyclePreset steps through presets both ways and wraps", () => {
+  const p = [25, 50, 100, 300, 500, 1000]
+  assert.equal(M.cyclePreset(300, p, 1), 500)
+  assert.equal(M.cyclePreset(300, p, -1), 100)
+  assert.equal(M.cyclePreset(1000, p, 1), 25)
+  assert.equal(M.cyclePreset(25, p, -1), 1000)
+  assert.equal(M.cyclePreset(150, p, 1), 300, "a hand-set value steps to the next preset")
+  assert.equal(M.cyclePreset(150, p, -1), 100)
+})

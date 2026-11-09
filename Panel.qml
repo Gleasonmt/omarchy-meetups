@@ -53,10 +53,18 @@ Panel {
 
   // ---- Panel cursor ---------------------------------------------------------
 
+  // Rows, top to bottom: the meetups, "All meetups", Distance, Look ahead.
   property int rowIndex: 0
   property bool cursorActive: false
-  readonly property int rowCount: Math.min(meetups.length, maxRows) + 1
   readonly property int maxRows: 8
+  readonly property int shownMeetups: Math.min(meetups.length, maxRows)
+  readonly property int allRow: shownMeetups
+  readonly property int distanceRow: shownMeetups + 1
+  readonly property int daysRow: shownMeetups + 2
+  readonly property int rowCount: shownMeetups + 3
+
+  readonly property var distancePresets: unit === "km" ? [50, 100, 250, 500, 1000] : [25, 50, 100, 300, 500, 1000]
+  readonly property var dayPresets: [14, 30, 90, 180, 365]
 
   readonly property color foreground: bar ? bar.foreground : Commons.Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.55)
@@ -68,9 +76,18 @@ Panel {
     root.close()
   }
 
-  function activateRow(i) {
-    if (i < Math.min(meetups.length, maxRows)) openUrl(meetups[i].url)
-    else openUrl("https://omarchy.org/meetups/")
+  function activateRow(i, direction) {
+    if (i < shownMeetups) openUrl(meetups[i].url)
+    else if (i === allRow) openUrl("https://omarchy.org/meetups/")
+    else if (i === distanceRow) setSetting("radius", Model.cyclePreset(radius, distancePresets, direction || 1))
+    else if (i === daysRow) setSetting("days", Model.cyclePreset(days, dayPresets, direction || 1))
+  }
+
+  // Settings live on this widget's entry in shell.json. omarchy-bar writes it
+  // the same way `omarchy bar set` does, and the shell hands the new value
+  // straight back through `settings`.
+  function setSetting(key, value) {
+    Quickshell.execDetached(["omarchy-bar", "set", "gleasonmt.meetups", key, String(value)])
   }
 
   function refresh(force) {
@@ -229,6 +246,10 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
+        if (dx !== 0 && dy === 0 && root.rowIndex >= root.distanceRow) {
+          root.activateRow(root.rowIndex, dx > 0 ? 1 : -1)
+          return
+        }
         root.rowIndex = Math.max(0, Math.min(root.rowCount - 1, root.rowIndex + dy))
       }
       onActivateRequested: if (root.cursorActive) root.activateRow(root.rowIndex)
@@ -300,11 +321,33 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
 
           MeetupRow {
             width: parent.width
-            rowIndex: Math.min(root.meetups.length, root.maxRows)
+            rowIndex: root.allRow
             glyph: "\u{f0349}"
             label: "All meetups on omarchy.org"
             caption: "Host one: omarchy.org/meetups"
             onActivated: root.openUrl("https://omarchy.org/meetups/")
+          }
+
+          PanelSeparator { foreground: root.foreground }
+
+          // The two settings most people want, changeable right here: click
+          // for the next preset, right-click (or Left) for the one before.
+          MeetupRow {
+            width: parent.width
+            rowIndex: root.distanceRow
+            glyph: "\u{f08f0}"
+            label: "Distance: " + root.radius + " " + root.unit
+            caption: "Click for farther, right-click for closer"
+            onActivated: function(direction) { root.activateRow(root.distanceRow, direction) }
+          }
+
+          MeetupRow {
+            width: parent.width
+            rowIndex: root.daysRow
+            glyph: "\u{f00ed}"
+            label: "Look ahead: " + root.days + " days"
+            caption: "Click for longer, right-click for shorter"
+            onActivated: function(direction) { root.activateRow(root.daysRow, direction) }
           }
 
           PanelSeparator { foreground: root.foreground }
@@ -336,7 +379,7 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
     property string glyph: ""
     property string label: ""
     property string caption: ""
-    signal activated()
+    signal activated(int direction)
 
     hasCursor: root.cursorActive && root.rowIndex === rowIndex
     foreground: root.foreground
@@ -346,8 +389,9 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
       onEntered: { root.cursorActive = true; root.rowIndex = row.rowIndex }
-      onClicked: row.activated()
+      onClicked: function(mouse) { row.activated(mouse.button === Qt.RightButton ? -1 : 1) }
     }
 
     RowLayout {

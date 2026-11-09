@@ -23,7 +23,9 @@ omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
 
 ## Settings
 
-Change them with `omarchy bar set`; the widget updates right away:
+**Distance** and **Look ahead** are at the bottom of the widget's list: click to step up through
+common values, right-click to step back (or use the arrow keys). Everything can also be set from a
+terminal with `omarchy bar set`, and the widget updates right away:
 
 ```bash
 omarchy bar set gleasonmt.meetups radius 150   # distance

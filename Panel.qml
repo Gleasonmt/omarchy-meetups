@@ -18,6 +18,7 @@ Panel {
 
   readonly property string unit: setting("unit", "mi") === "km" ? "km" : "mi"
   readonly property int radius: Math.max(1, Math.min(20000, Number(setting("radius", 100)) || 100))
+  readonly property int days: Math.max(1, Math.min(365, Number(setting("days", 90)) || 90))
   readonly property bool includeOnline: setting("includeOnline", false) === true
   readonly property bool hideWhenNone: setting("hideWhenNone", false) === true
 
@@ -46,7 +47,7 @@ Panel {
 
   property double now: Date.now()
 
-  readonly property var meetups: Model.upcoming(feed.events, origin, radius, unit, includeOnline, now)
+  readonly property var meetups: Model.upcoming(feed.events, origin, radius, unit, includeOnline, now, days)
   readonly property var next: meetups.length > 0 ? meetups[0] : null
   readonly property string barLabel: Model.barLabel(next, now)
 
@@ -204,7 +205,7 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
     dimmed: root.next === null
     labelText: root.bar && root.bar.vertical ? "" : root.barLabel
     slotSize: labelText !== "" ? Style.bar.iconSlot + labelMetrics.advanceWidth + Style.space(6) : Style.bar.iconSlot
-    tooltipText: root.next ? root.next.title : "No Omarchy meetups within " + root.radius + " " + root.unit
+    tooltipText: root.next ? root.next.title : "No Omarchy meetups within " + root.radius + " " + root.unit + " in the next " + root.days + " days"
     onPressed: function(b) {
       if (b === Qt.MiddleButton) root.refresh(true)
       else root.toggle()
@@ -265,7 +266,7 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
             }
             title: root.next ? root.next.title : "No meetups nearby"
             meta: root.next ? Model.detailLine(root.next, root.unit)
-              : (root.origin ? "Nothing within " + root.radius + " " + root.unit + " of " + (root.origin.name || "you")
+              : (root.origin ? "Nothing within " + root.radius + " " + root.unit + " of " + (root.origin.name || "you") + " in the next " + root.days + " days"
                  : "Waiting for your location")
           }
 
@@ -275,7 +276,7 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
             visible: root.meetups.length > 0
             foreground: root.foreground
             fontFamily: root.fontFamily
-            text: "Upcoming within " + root.radius + " " + root.unit
+            text: "Within " + root.radius + " " + root.unit + " · next " + root.days + " days"
           }
 
           Column {

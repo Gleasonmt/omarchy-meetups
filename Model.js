@@ -80,15 +80,17 @@ function fromKm(km, unit) {
   return unit === "km" ? km : km / KM_PER_MILE
 }
 
-// Upcoming meetups within the radius, soonest first. A meetup stays listed
-// until it ends, so tonight's is still there while it runs. Online meetups
-// have no distance and are included only when asked for.
-function upcoming(events, origin, radius, unit, includeOnline, now) {
+// Upcoming meetups within the radius that start in the next `days` days,
+// soonest first. A meetup stays listed until it ends, so tonight's is still
+// there while it runs. Online meetups have no distance and are included only
+// when asked for.
+function upcoming(events, origin, radius, unit, includeOnline, now, days) {
   var radiusKm = toKm(Math.max(0, Number(radius) || 0), unit)
+  var horizon = now + Math.max(1, Number(days) || 90) * 86400000
   var out = []
   for (var i = 0; i < events.length; i++) {
     var e = events[i]
-    if (e.end <= now) continue
+    if (e.end <= now || e.start > horizon) continue
     var km = null
     if (e.online) {
       if (!includeOnline) continue

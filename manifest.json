@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Gleasonmt",
   "license": "MIT",
-  "description": "The next Omarchy meetup near you in the bar, within a distance you choose, with every upcoming one a click away.",
+  "description": "The next Omarchy meetup near you in the bar, within the distance and time window you choose, with every upcoming one a click away.",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "Panel.qml"
@@ -18,12 +18,14 @@
     "defaultSection": "right",
     "defaults": {
       "radius": 100,
+      "days": 90,
       "unit": "mi",
       "includeOnline": false,
       "hideWhenNone": false
     },
     "schema": [
       { "key": "radius", "type": "integer", "label": "Distance", "min": 5, "max": 5000, "step": 5, "defaultValue": 100, "description": "Show meetups within this distance of your weather location." },
+      { "key": "days", "type": "integer", "label": "Look ahead (days)", "min": 7, "max": 365, "step": 7, "defaultValue": 90, "description": "Show meetups starting within this many days." },
       { "key": "unit", "type": "enum", "label": "Unit", "options": ["mi", "km"], "defaultValue": "mi" },
       { "key": "includeOnline", "type": "boolean", "label": "Include online meetups", "defaultValue": false },
       { "key": "hideWhenNone", "type": "boolean", "label": "Hide when none are nearby", "defaultValue": false }

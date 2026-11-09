@@ -95,3 +95,11 @@ test("formatDistance and formatTime", () => {
   assert.equal(M.formatTime(Date.parse("2026-11-09T18:30:00-06:00")), "6:30 PM")
   assert.equal(M.formatTime(Date.parse("2026-11-09T00:05:00-06:00")), "12:05 AM")
 })
+
+test("only meetups starting within the look-ahead window are listed", () => {
+  const events = M.parseFeed(feed([dfw, austin])).events
+  const now = Date.parse("2026-11-09T15:00:00Z")
+  assert.deepEqual(plain(M.upcoming(events, carrollton, 300, "mi", false, now, 90).map(e => e.id)), ["evt-dfw", "evt-atx"])
+  assert.deepEqual(plain(M.upcoming(events, carrollton, 300, "mi", false, now, 14).map(e => e.id)), ["evt-dfw"])
+  assert.deepEqual(plain(M.upcoming(events, carrollton, 300, "mi", false, now).map(e => e.id)), ["evt-dfw", "evt-atx"], "defaults to 90 days")
+})

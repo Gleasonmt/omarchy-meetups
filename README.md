@@ -1,7 +1,7 @@
 # Omarchy Meetups
 
 The next [Omarchy meetup](https://omarchy.org/meetups/) near you, in your bar. Pick how far you're
-willing to go (100 miles by default) and how far ahead to look (90 days), and the widget shows
+willing to go (300 miles by default) and how far ahead to look (90 days), and the widget shows
 the next meetup in range ("Today 6 PM", "Tomorrow", "Dec 7"). Click it for every upcoming
 meetup in range, each one a click from its sign-up page.
 
@@ -27,7 +27,7 @@ Setup › Bar, or inline on the widget's entry in `~/.config/omarchy/shell.json`
 
 | key | default | |
 |---|---|---|
-| `radius` | `100` | how far to look |
+| `radius` | `300` | how far to look |
 | `days` | `90` | how many days ahead to look (7–365) |
 | `unit` | `mi` | `mi` or `km` |
 | `includeOnline` | `false` | also list online meetups |

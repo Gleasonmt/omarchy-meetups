@@ -17,7 +17,7 @@ Panel {
   // ---- Settings (inline on the bar entry in shell.json) ---------------------
 
   readonly property string unit: setting("unit", "mi") === "km" ? "km" : "mi"
-  readonly property int radius: Math.max(1, Math.min(20000, Number(setting("radius", 100)) || 100))
+  readonly property int radius: Math.max(1, Math.min(20000, Number(setting("radius", 300)) || 300))
   readonly property int days: Math.max(1, Math.min(365, Number(setting("days", 90)) || 90))
   readonly property bool includeOnline: setting("includeOnline", false) === true
   readonly property bool hideWhenNone: setting("hideWhenNone", false) === true

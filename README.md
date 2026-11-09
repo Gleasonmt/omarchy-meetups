@@ -2,12 +2,35 @@
 
 The next [Omarchy meetup](https://omarchy.org/meetups/) near you, in your bar. Pick how far you're
 willing to go (300 miles by default) and how far ahead to look (90 days), and the widget shows
-the next meetup in range ("Today 6 PM", "Tomorrow", "Dec 7"). Click it for every upcoming
-meetup in range, each one a click from its sign-up page.
+how soon the next meetup in range is ("Tonight", "Tomorrow", "in 3 days"). Hover for its name and
+time; click it for every upcoming meetup in range, each one a click from its sign-up page.
+
+![The widget in the bar, reading "Tonight"](media/bar.png)
 
 ```bash
 omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
 ```
+
+## What it looks like
+
+The list, with the distance and look-ahead you can change right there. It wears whatever theme
+you're using:
+
+| Tokyo Night | Another theme |
+|---|---|
+| ![The meetups list in Tokyo Night](media/panel-tokyo-night.png) | ![The same list in a yellow theme](media/panel-other-theme.png) |
+
+What the bar shows:
+
+| When | Bar |
+|---|---|
+| Happening right now | Now |
+| Today, from 5 PM | Tonight |
+| Today, before 5 PM | Today |
+| Tomorrow | Tomorrow |
+| 2–13 days away | in 3 days |
+| 2 weeks or more | in 4 wks |
+| Nothing in range | the icon, dimmed |
 
 ## How it works
 

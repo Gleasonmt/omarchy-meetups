@@ -24,8 +24,8 @@ printf '%s' "$STUB_BODY" > "$out"
   chmodSync(join(bin, "curl"), 0o755)
   const dir = join(root, "cache")
   const log = join(root, "curl-args")
-  const run = (env = {}, age = "0", bytes = "2000000", url = "https://example.org/meetups.json") =>
-    spawnSync("bash", ["-c", `umask 022; exec bash "$0" "$@"`, script, dir, "meetups.json", url, age, bytes], {
+  const run = (env = {}, age = "0", bytes = "2000000", url = "https://example.org/meetups.json", name = "meetups.json") =>
+    spawnSync("bash", ["-c", `umask 022; exec bash "$0" "$@"`, script, dir, name, url, age, bytes], {
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, STUB_LOG: log, STUB_BODY: '{"events":[]}', ...env },
       encoding: "utf8",
     })
@@ -37,6 +37,7 @@ test("downloads into place, private under umask 022", () => {
   assert.equal(s.run().status, 0)
   assert.equal(readFileSync(s.file, "utf8"), '{"events":[]}')
   assert.equal(statSync(s.file).mode & 0o777, 0o600)
+  assert.equal(statSync(s.dir).mode & 0o777, 0o700, "a new cache folder is private too")
   assert.deepEqual(readdirSync(s.dir).filter(f => f.startsWith(".dl.")), [], "no temporary file left")
 })
 
@@ -93,5 +94,16 @@ test("a second bar finds the download already running and leaves it", async () =
   await new Promise(r => setTimeout(r, 300))
   assert.equal(s.run().status, 2)
   await new Promise(r => first.on("exit", r))
+  assert.equal(readFileSync(s.file, "utf8"), "slow")
+})
+
+test("the meetup list and the location download at the same time without blocking each other", async () => {
+  const s = sandbox()
+  const env = { ...process.env, PATH: `${s.bin}:${process.env.PATH}`, STUB_LOG: s.log, STUB_BODY: "slow", STUB_SLEEP: "1" }
+  const feed = spawn("bash", [script, s.dir, "meetups.json", "https://example.org/m.json", "0", "2000000"], { env })
+  await new Promise(r => setTimeout(r, 300))
+  assert.equal(s.run({ STUB_BODY: '{"name":"Here"}' }, "0", "4096", "https://geo.example.org/", "location.json").status, 0)
+  assert.equal(readFileSync(join(s.dir, "location.json"), "utf8"), '{"name":"Here"}')
+  await new Promise(r => feed.on("exit", r))
   assert.equal(readFileSync(s.file, "utf8"), "slow")
 })

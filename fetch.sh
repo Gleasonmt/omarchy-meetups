@@ -9,8 +9,9 @@
 #   place only when complete, so a reader never sees half a file and a failed
 #   download keeps the old copy.
 # - Files are created 0600 (mktemp) whatever the umask.
-# - One download at a time per folder: every monitor's bar runs this, and the
-#   ones that find the lock taken leave it to the one holding it.
+# - One download at a time per file: every monitor's bar runs this, and the
+#   ones that find that file's lock taken leave it to the one holding it.
+#   Different files (the meetup list, the location) never wait on each other.
 # - Temporary files left by a download that was killed (the shell quitting
 #   mid-download) are removed on the next run.
 # Exit codes: 0 done or fresh enough, 1 failed, 2 another download is running.
@@ -24,7 +25,7 @@ case $url in https://*) ;; *) exit 1 ;; esac
 case $age$max_bytes in *[!0-9]*) exit 1 ;; esac
 
 mkdir -p "$dir" || exit 1
-exec 9>"$dir/.lock" || exit 1
+exec 9>"$dir/.$name.lock" || exit 1
 flock -n 9 || exit 2
 
 find "$dir" -maxdepth 1 -name '.dl.*' -mmin +5 -delete 2>/dev/null

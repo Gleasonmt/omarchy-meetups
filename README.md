@@ -24,7 +24,12 @@ with a click. It wears whatever theme you're using:
     <th>Filter options open</th>
   </tr>
   <tr>
-    <td valign="top"><img src="media/panel.png" width="400" alt="The list, headed by Omarchy DFW 002 in Dallas with its skyline cover"></td>
+    <td valign="top">
+      <img src="media/panel.png" width="400" alt="Within 100 miles: the list, headed by Omarchy DFW 002 in Dallas with its skyline cover"><br>
+      <sub>Within 100 mi of Dallas–Fort Worth</sub><br><br>
+      <img src="media/panel-500mi.png" width="400" alt="Within 500 miles: Omarchy NWA 002 in Bentonville joins the list, ahead of DFW 002"><br>
+      <sub>Widen it to 500 mi and Bentonville joins in</sub>
+    </td>
     <td valign="top"><img src="media/panel-options-open.png" width="400" alt="The same list with Filter options open: distance, look ahead, units, online meetups and reminders"></td>
   </tr>
 </table>

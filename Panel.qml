@@ -23,6 +23,7 @@ Panel {
   readonly property int days: Model.clampInt(setting("days", 90), 7, 365, 90)
   readonly property bool includeOnline: Model.toBool(setting("includeOnline", false))
   readonly property bool hideWhenNone: Model.toBool(setting("hideWhenNone", false))
+  readonly property bool reminders: Model.toBool(setting("reminders", true))
 
   // ---- Data -----------------------------------------------------------------
 
@@ -60,15 +61,22 @@ Panel {
 
   // ---- Panel cursor ---------------------------------------------------------
 
-  // Rows, top to bottom: the meetups, "All meetups", Distance, Look ahead.
+  // Rows, top to bottom: the meetups (or, when there are none, "Host one"),
+  // "All meetups", then the settings: Distance, Look ahead, Units, Online
+  // meetups, Reminders.
   property int rowIndex: 0
   property bool cursorActive: false
   readonly property int maxRows: 8
   readonly property int shownMeetups: Math.min(meetups.length, maxRows)
-  readonly property int allRow: shownMeetups
-  readonly property int distanceRow: shownMeetups + 1
-  readonly property int daysRow: shownMeetups + 2
-  readonly property int rowCount: shownMeetups + 3
+  readonly property bool showHost: shownMeetups === 0
+  readonly property int hostRow: showHost ? 0 : -1
+  readonly property int allRow: shownMeetups + (showHost ? 1 : 0)
+  readonly property int distanceRow: allRow + 1
+  readonly property int daysRow: allRow + 2
+  readonly property int unitRow: allRow + 3
+  readonly property int onlineRow: allRow + 4
+  readonly property int remindRow: allRow + 5
+  readonly property int rowCount: allRow + 6
 
   readonly property var distancePresets: unit === "km" ? [50, 100, 250, 500, 1000] : [25, 50, 100, 300, 500, 1000]
   readonly property var dayPresets: [14, 30, 90, 180, 365]
@@ -85,9 +93,25 @@ Panel {
 
   function activateRow(i, direction) {
     if (i < shownMeetups) openUrl(meetups[i].url)
+    else if (i === hostRow) openUrl(hostUrl)
     else if (i === allRow) openUrl("https://omarchy.org/meetups/")
     else if (i === distanceRow) setSetting("radius", Model.cyclePreset(radius, distancePresets, direction || 1))
     else if (i === daysRow) setSetting("days", Model.cyclePreset(days, dayPresets, direction || 1))
+    else if (i === unitRow) switchUnit()
+    else if (i === onlineRow) setSetting("includeOnline", !includeOnline)
+    else if (i === remindRow) setSetting("reminders", !reminders)
+  }
+
+  // The Omarchy calendar on Luma, where a new meetup is submitted.
+  readonly property string hostUrl: "https://luma.com/omarchy"
+
+  // Miles to km and back keeps the same area: the distance is converted and
+  // saved first, then the unit, one after the other so neither write is lost.
+  function switchUnit() {
+    var to = unit === "km" ? "mi" : "km"
+    Quickshell.execDetached(["bash", "-c",
+      'omarchy-bar set "$0" radius "$1" --json && omarchy-bar set "$0" unit "$2" --json',
+      "gleasonmt.meetups", String(Model.convertRadius(radius, unit, to)), JSON.stringify(to)])
   }
 
   // Settings live on this widget's entry in shell.json. omarchy-bar writes it
@@ -113,6 +137,35 @@ Panel {
     fetchProc.running = true
     return "started"
   }
+
+  // ---- Reminders ------------------------------------------------------------
+
+  // remind.sh records each reminder it sends, under a lock, so one meetup
+  // gets one notification the day before and one on the day, however many
+  // monitors have a bar. sentHere only saves asking it again every minute.
+  readonly property string remindScript: decodeURIComponent(String(Qt.resolvedUrl("remind.sh")).replace(/^file:\/\//, ""))
+  readonly property string stateDir: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/gleasonmt-meetups/reminded"
+  property var sentHere: ({})
+
+  function checkReminders() {
+    if (!reminders) return
+    for (var i = 0; i < meetups.length; i++) {
+      var m = meetups[i]
+      var kind = Model.reminderDue(m, now)
+      if (!kind) continue
+      var key = Qt.md5(m.id + "|" + m.start + "|" + kind)
+      if (sentHere[key]) continue
+      sentHere[key] = true
+      var t = Model.reminderText(m, kind, unit)
+      // Clicking the notification opens the meetup's page; the link is the
+      // feed's https URL, one argument, never parsed by a shell.
+      Quickshell.execDetached(["bash", remindScript, stateDir, key,
+        "--app-name", "Omarchy Meetups", "-g", "\u{f0849}", "-u", "normal",
+        t.headline, t.body, "--exec", "omarchy-launch-browser", m.url])
+    }
+  }
+
+  onMeetupsChanged: checkReminders()
 
   function detectLocation() {
     if (geoProc.running || !configuredLoaded || configuredLocation !== null) return
@@ -194,7 +247,10 @@ Panel {
     interval: 60 * 1000
     running: true
     repeat: true
-    onTriggered: root.now = Date.now()
+    onTriggered: {
+      root.now = Date.now()
+      root.checkReminders()
+    }
   }
 
   Component.onCompleted: refresh(false)
@@ -261,6 +317,8 @@ Panel {
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
         if (dx !== 0 && dy === 0 && root.rowIndex >= root.distanceRow) {
+          // Left/Right step Distance and Look ahead; on the switches below
+          // them either key flips the switch.
           root.activateRow(root.rowIndex, dx > 0 ? 1 : -1)
           return
         }
@@ -333,12 +391,23 @@ Panel {
             }
           }
 
+          // Nothing nearby is a chance to start one.
+          MeetupRow {
+            visible: root.showHost
+            width: parent.width
+            rowIndex: root.hostRow
+            glyph: "\u{f0415}"
+            label: "Host a meetup near you"
+            caption: "Put it on Luma, then submit it to the Omarchy calendar"
+            onActivated: root.openUrl(root.hostUrl)
+          }
+
           MeetupRow {
             width: parent.width
             rowIndex: root.allRow
             glyph: "\u{f0349}"
             label: "All meetups on omarchy.org"
-            caption: "Host one: omarchy.org/meetups"
+            caption: "And the guidelines for hosting one"
             onActivated: root.openUrl("https://omarchy.org/meetups/")
           }
 
@@ -362,6 +431,33 @@ Panel {
             label: "Look ahead: " + root.days + " days"
             caption: "Click for longer, right-click for shorter"
             onActivated: function(direction) { root.activateRow(root.daysRow, direction) }
+          }
+
+          MeetupRow {
+            width: parent.width
+            rowIndex: root.unitRow
+            glyph: "\u{f046d}"
+            label: "Units: " + (root.unit === "km" ? "kilometers" : "miles")
+            caption: "Click to switch to " + (root.unit === "km" ? "miles" : "kilometers")
+            onActivated: root.activateRow(root.unitRow)
+          }
+
+          MeetupRow {
+            width: parent.width
+            rowIndex: root.onlineRow
+            glyph: "\u{f059f}"
+            label: "Online meetups: " + (root.includeOnline ? "shown" : "hidden")
+            caption: "Click to " + (root.includeOnline ? "hide" : "show") + " meetups with no place"
+            onActivated: root.activateRow(root.onlineRow)
+          }
+
+          MeetupRow {
+            width: parent.width
+            rowIndex: root.remindRow
+            glyph: root.reminders ? "\u{f009a}" : "\u{f009b}"
+            label: "Reminders: " + (root.reminders ? "on" : "off")
+            caption: "A notification the day before and on the day"
+            onActivated: root.activateRow(root.remindRow)
           }
 
           PanelSeparator { foreground: root.foreground }

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "gleasonmt.meetups",
   "name": "Omarchy Meetups",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Gleasonmt",
   "license": "MIT",
   "description": "The next Omarchy meetup near you in the bar, within the distance and time window you choose, with every upcoming one a click away.",
@@ -23,7 +23,8 @@
       "days": 90,
       "unit": "mi",
       "includeOnline": false,
-      "hideWhenNone": false
+      "hideWhenNone": false,
+      "reminders": true
     },
     "schema": [
       {
@@ -67,6 +68,13 @@
         "type": "boolean",
         "label": "Hide when none are nearby",
         "defaultValue": false
+      },
+      {
+        "key": "reminders",
+        "type": "boolean",
+        "label": "Reminders",
+        "defaultValue": true,
+        "description": "A notification the day before a meetup in range and on the day, from 9 AM."
       }
     ]
   }

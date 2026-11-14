@@ -91,7 +91,7 @@ test("tonight's 6 PM Central meetup, stored as Nov 10 UTC, is tonight in local t
   assert.equal(M.barLabel(meetup, Date.parse("2026-11-09T15:00:00Z")), "Tonight")
   assert.equal(M.barLabel(meetup, Date.parse("2026-11-08T15:00:00Z")), "Tomorrow")
   assert.equal(M.barLabel(meetup, Date.parse("2026-11-06T15:00:00Z")), "in 3 days")
-  assert.equal(M.barLabel(meetup, Date.parse("2026-10-12T15:00:00Z")), "in 4 wks")
+  assert.equal(M.barLabel(meetup, Date.parse("2026-10-12T15:00:00Z")), "in 28 days", "days, not rounded weeks")
   assert.equal(M.barLabel(meetup, Date.parse("2026-11-10T00:30:00Z")), "Now")
   const lunch = { ...meetup, start: Date.parse("2026-11-09T18:00:00Z") }
   assert.equal(M.barLabel(lunch, Date.parse("2026-11-09T15:00:00Z")), "Today", "a noon meetup isn't tonight")
@@ -150,4 +150,45 @@ test("settings set from a terminal without --json still work", () => {
   assert.equal(M.clampInt("500", 5, 5000, 300), 500)
   assert.equal(M.clampInt(99999, 5, 5000, 300), 5000)
   assert.equal(M.clampInt("lots", 5, 5000, 300), 300)
+})
+
+test("the bar counts whole days however far off", () => {
+  const meetup = M.parseFeed(feed([dfw])).events[0]
+  assert.equal(M.barLabel(meetup, Date.parse("2026-10-26T15:00:00Z")), "in 14 days")
+  assert.equal(M.barLabel(meetup, Date.parse("2026-08-11T15:00:00Z")), "in 90 days")
+})
+
+test("switching units keeps the same distance, rounded to 5", () => {
+  assert.equal(M.convertRadius(300, "mi", "km"), 485)
+  assert.equal(M.convertRadius(485, "km", "mi"), 300)
+  assert.equal(M.convertRadius(5, "km", "mi"), 5, "never below the minimum")
+  assert.equal(M.convertRadius(5000, "mi", "km"), 5000, "never above the maximum")
+  assert.equal(M.convertRadius("100", "mi", "mi"), 100)
+  assert.equal(M.convertRadius("junk", "mi", "km"), 485, "a broken value falls back to the default")
+})
+
+test("reminders fall due the day before and on the day, from 9 AM", () => {
+  const meetup = M.parseFeed(feed([dfw])).events[0] // Mon Nov 9, 6 PM Central
+  const at = iso => M.reminderDue(meetup, Date.parse(iso))
+  assert.equal(at("2026-11-07T16:00:00Z"), "", "two days before: nothing")
+  assert.equal(at("2026-11-08T14:00:00Z"), "", "8 AM the day before: not yet")
+  assert.equal(at("2026-11-08T16:00:00Z"), "tomorrow")
+  assert.equal(at("2026-11-09T14:00:00Z"), "", "8 AM on the day: not yet")
+  assert.equal(at("2026-11-09T16:00:00Z"), "today")
+  assert.equal(at("2026-11-09T23:59:00Z"), "today")
+  assert.equal(at("2026-11-10T00:30:00Z"), "", "started: no reminder")
+  const breakfast = { ...meetup, start: Date.parse("2026-11-09T13:00:00Z") } // 7 AM
+  assert.equal(M.reminderDue(breakfast, Date.parse("2026-11-09T11:00:00Z")), "today", "an early start is still reminded")
+  assert.equal(M.reminderDue(null, Date.now()), "")
+})
+
+test("reminder text escapes the feed's markup", () => {
+  const meetup = M.upcoming(M.parseFeed(feed([{ ...dfw, title: "<b>Tom & Jerry</b>", city: "<i>Frisco</i>" }])).events,
+    carrollton, 50, "mi", false, Date.parse("2026-11-08T16:00:00Z"))[0]
+  const t = M.reminderText(meetup, "tomorrow", "mi")
+  assert.equal(t.headline, "Omarchy meetup tomorrow")
+  assert.equal(t.body, "&lt;b&gt;Tom &amp; Jerry&lt;/b&gt;\nMon Nov 9 · 6 PM · &lt;i&gt;Frisco&lt;/i&gt; · 14 mi")
+  assert.equal(M.reminderText(meetup, "today", "mi").headline, "Omarchy meetup tonight")
+  const lunch = { ...meetup, start: Date.parse("2026-11-09T18:00:00Z") }
+  assert.equal(M.reminderText(lunch, "today", "mi").headline, "Omarchy meetup today")
 })

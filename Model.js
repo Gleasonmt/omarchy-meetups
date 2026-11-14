@@ -178,17 +178,22 @@ function formatDate(ms) {
   return DAYS[d.getDay()] + " " + MONTHS[d.getMonth()] + " " + d.getDate()
 }
 
+// "Tonight" for a meetup that starts from 5 PM, else "Today".
+function todayWord(meetup) {
+  return new Date(meetup.start).getHours() >= 17 ? "Tonight" : "Today"
+}
+
 // Short form for the bar: how far away the meetup is, never a clock time, so
 // it can't be mistaken for the bar's clock. "Now", "Tonight" (or "Today" for
-// one before 5 PM), "Tomorrow", "in 3 days", "in 4 wks".
+// one before 5 PM), "Tomorrow", then whole days ("in 3 days", "in 45 days"):
+// exact, where weeks would round.
 function barLabel(meetup, now) {
   if (!meetup) return ""
   if (meetup.start <= now) return "Now"
   var days = daysUntil(meetup.start, now)
-  if (days === 0) return new Date(meetup.start).getHours() >= 17 ? "Tonight" : "Today"
+  if (days === 0) return todayWord(meetup)
   if (days === 1) return "Tomorrow"
-  if (days < 14) return "in " + days + " days"
-  return "in " + Math.round(days / 7) + " wks"
+  return "in " + days + " days"
 }
 
 // One line under a meetup's title: "Mon Nov 9 · 6 PM · Frisco · 12 mi".
@@ -212,4 +217,41 @@ function cyclePreset(current, presets, direction) {
   }
   for (var j = 0; j < presets.length; j++) if (presets[j] > v) return presets[j]
   return presets[0]
+}
+
+// The same distance in the other unit, rounded to the 5 the setting steps in,
+// so switching miles to km keeps the area you chose (300 mi becomes 485 km).
+function convertRadius(radius, from, to) {
+  var r = clampInt(radius, 5, 5000, 300)
+  if (from === to) return r
+  var v = to === "km" ? r * KM_PER_MILE : r / KM_PER_MILE
+  return clampInt(Math.round(v / 5) * 5, 5, 5000, 300)
+}
+
+// Reminders: one the day before and one on the day, each from 9 AM local
+// time (or within 3 hours of an early start). "" when none is due. A meetup
+// that has started gets none.
+var REMIND_HOUR = 9
+function reminderDue(meetup, now) {
+  if (!meetup || meetup.start <= now) return ""
+  var days = daysUntil(meetup.start, now)
+  var morning = new Date(now).getHours() >= REMIND_HOUR
+  if (days === 0) return morning || meetup.start - now <= 3 * 3600000 ? "today" : ""
+  if (days === 1) return morning ? "tomorrow" : ""
+  return ""
+}
+
+// A notification body is markup to the notification service, so text from
+// the feed is escaped and always shows as written.
+function escapeMarkup(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+// Headline (plain text, our own words) and body (markup) for a reminder.
+function reminderText(meetup, kind, unit) {
+  var when = kind === "tomorrow" ? "tomorrow" : todayWord(meetup).toLowerCase()
+  return {
+    headline: "Omarchy meetup " + when,
+    body: escapeMarkup(meetup.title) + "\n" + escapeMarkup(detailLine(meetup, unit))
+  }
 }

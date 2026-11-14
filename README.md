@@ -3,7 +3,9 @@
 The next [Omarchy meetup](https://omarchy.org/meetups/) near you, in your bar. Pick how far you're
 willing to go (300 miles by default) and how far ahead to look (90 days), and the widget shows
 how soon the next meetup in range is ("Tonight", "Tomorrow", "in 3 days"). Hover for its name and
-time; click it for every upcoming meetup in range, each one a click from its sign-up page.
+time; click it for every upcoming meetup in range, each one a click from its sign-up page. A
+reminder pops up the day before and on the day, and if nothing is near you, the list shows you how
+to host one.
 
 ![The widget in the bar, reading "Tonight"](media/bar.png)
 
@@ -13,8 +15,7 @@ omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
 
 ## What it looks like
 
-The list, with the distance and look-ahead you can change right there. It wears whatever theme
-you're using:
+The list, with its settings right there underneath. It wears whatever theme you're using:
 
 | Tokyo Night | Another theme |
 |---|---|
@@ -28,8 +29,7 @@ What the bar shows:
 | Today, from 5 PM | Tonight |
 | Today, before 5 PM | Today |
 | Tomorrow | Tomorrow |
-| 2–13 days away | in 3 days |
-| 2 weeks or more | in 4 wks |
+| 2 days or more | in 3 days, in 45 days |
 | Nothing in range | the icon, dimmed |
 
 ## How it works
@@ -46,11 +46,19 @@ What the bar shows:
   the same lookup the Weather panel makes. Change your Weather location and the meetups follow
   within the hour, or as soon as you open the list.
 - **Times** are shown in your own time zone.
+- **Reminders**: for each meetup in range, one notification the day before and one on the day,
+  from 9 AM (or within 3 hours of an earlier start). Click it to open the meetup's page. Each is sent
+  once, however many monitors you have, and recorded as an empty file in
+  `${XDG_STATE_HOME:-~/.local/state}/gleasonmt-meetups/reminded/` (removed after 60 days). Turn
+  them off in the list.
+- **Nothing nearby?** The list offers "Host a meetup near you", which opens the Omarchy calendar on
+  Luma, where new meetups are submitted. omarchy.org/meetups has the guidelines.
 
 ## Dependencies and network
 
 Everything it needs comes with Omarchy: `curl` and `bash` to fetch, `omarchy-launch-browser` to
-open links, and `omarchy-bar` to save the settings you change in the panel. It makes two kinds of
+open links, `omarchy-notification-send` for reminders, and `omarchy-bar` to save the settings you
+change in the panel. It makes two kinds of
 request, both plain HTTPS GETs:
 
 - `raw.githubusercontent.com/omacom/omarchy-site/master/src/data/meetups.json`, omarchy.org's
@@ -60,19 +68,27 @@ request, both plain HTTPS GETs:
   4 KB)
 
 Both answers are read as JSON, every field is cut to a length the panel can show, and nothing
-downloaded is ever run. Cached files are readable only by you.
+downloaded is ever run. A meetup's name and place are escaped before they go into a reminder, so
+they always show as written. Cached files and reminder records are readable only by you.
 
 ## Settings
 
-**Distance** and **Look ahead** are at the bottom of the widget's list: click to step up through
-common values, right-click to step back (or use the arrow keys). Everything can also be set from a
-terminal with `omarchy bar set`, and the widget updates right away. Add `--json` for numbers and
-true/false:
+The settings are at the bottom of the widget's list:
+
+- **Distance** and **Look ahead**: click to step up through common values, right-click to step
+  back (or use the arrow keys).
+- **Units**: miles or kilometers. Switching converts the distance, so 300 mi becomes 485 km.
+- **Online meetups**: shown or hidden (hidden by default, since they have no distance).
+- **Reminders**: on or off (on by default).
+
+Everything can also be set from a terminal with `omarchy bar set`, and the widget updates right
+away. Add `--json` for numbers and true/false:
 
 ```bash
 omarchy bar set gleasonmt.meetups radius 150 --json          # distance
 omarchy bar set gleasonmt.meetups days 30 --json             # how far ahead
 omarchy bar set gleasonmt.meetups includeOnline true --json
+omarchy bar set gleasonmt.meetups reminders false --json
 omarchy bar set gleasonmt.meetups unit km
 ```
 
@@ -84,6 +100,7 @@ They're stored on the widget's entry in `~/.config/omarchy/shell.json`, which yo
 | `days` | `90` | how many days ahead to look (7–365) |
 | `unit` | `mi` | `mi` or `km` |
 | `includeOnline` | `false` | also list online meetups |
+| `reminders` | `true` | a notification the day before and on the day |
 | `hideWhenNone` | `false` | hide the widget when nothing is in range |
 
 Click the widget to open the list, middle-click to refresh it now. In the list, the arrow keys
@@ -95,13 +112,14 @@ move, Enter opens a meetup, and `r` refreshes. For a keybinding:
 
 ```bash
 omarchy plugin remove gleasonmt.meetups
-rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/gleasonmt-meetups"
+rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/gleasonmt-meetups" "${XDG_STATE_HOME:-$HOME/.local/state}/gleasonmt-meetups"
 ```
 
 ## Development
 
-The logic lives in `Model.js` and the download in `fetch.sh`; both are tested under Node (the
-fetch tests use a stub `curl`):
+The logic lives in `Model.js`, the download in `fetch.sh` and the send-once reminder in
+`remind.sh`; all three are tested under Node (the script tests use a stub `curl` and a stub
+`omarchy-notification-send`):
 
 ```bash
 node --test tests/*.test.mjs

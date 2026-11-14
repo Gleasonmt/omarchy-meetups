@@ -17,6 +17,33 @@ function text(value, max) {
   return String(value === undefined || value === null ? "" : value).slice(0, max).trim()
 }
 
+// A meetup's cover image, as omarchy.org lists it: a path on omarchy.org
+// such as "/images/meetups/evt-U925QBQtzBf2iX3-full.webp". Only that shape is
+// kept, so the file name is safe to use in the cache folder and the download
+// can only ever come from omarchy.org's meetup images. Anything else: "".
+// WebP only (every cover omarchy.org lists is one); cover.sh also checks the
+// downloaded bytes really are a still WebP of sane size before it is shown.
+var COVER_PATH = /^\/images\/meetups\/([A-Za-z0-9_-]{1,80}\.webp)$/
+function coverPath(value) {
+  var path = typeof value === "string" ? value : ""
+  return COVER_PATH.test(path) ? path : ""
+}
+
+function coverName(path) {
+  var m = COVER_PATH.exec(String(path || ""))
+  return m ? m[1] : ""
+}
+
+function coverUrl(path) {
+  return coverPath(path) ? "https://omarchy.org" + path : ""
+}
+
+// A file:// URL for a local path, each segment percent-encoded, so a home or
+// cache folder with "#", "%" or "?" in its name still works.
+function fileUrl(path) {
+  return "file://" + String(path).split("/").map(encodeURIComponent).join("/")
+}
+
 function coordinate(value, limit) {
   var n = parseFloat(value)
   return isNaN(n) || Math.abs(n) > limit ? null : n
@@ -55,6 +82,7 @@ function parseFeed(raw) {
       city: text(e.city, MAX_SHORT),
       country: text(e.country, MAX_SHORT),
       online: e.online === true,
+      cover: coverPath(e.cover),
       lat: lat === null || lon === null ? null : lat,
       lon: lat === null || lon === null ? null : lon
     })
@@ -137,7 +165,7 @@ function upcoming(events, origin, radius, unit, includeOnline, now, days) {
     }
     out.push({
       id: e.id, title: e.title, url: e.url, start: e.start, end: e.end,
-      city: e.city, country: e.country, online: e.online,
+      city: e.city, country: e.country, online: e.online, cover: e.cover || "",
       distance: km === null ? null : fromKm(km, unit)
     })
   }
@@ -178,17 +206,22 @@ function formatDate(ms) {
   return DAYS[d.getDay()] + " " + MONTHS[d.getMonth()] + " " + d.getDate()
 }
 
+// "Tonight" for a meetup that starts from 5 PM, else "Today".
+function todayWord(meetup) {
+  return new Date(meetup.start).getHours() >= 17 ? "Tonight" : "Today"
+}
+
 // Short form for the bar: how far away the meetup is, never a clock time, so
 // it can't be mistaken for the bar's clock. "Now", "Tonight" (or "Today" for
-// one before 5 PM), "Tomorrow", "in 3 days", "in 4 wks".
+// one before 5 PM), "Tomorrow", then whole days ("in 3 days", "in 45 days"):
+// exact, where weeks would round.
 function barLabel(meetup, now) {
   if (!meetup) return ""
   if (meetup.start <= now) return "Now"
   var days = daysUntil(meetup.start, now)
-  if (days === 0) return new Date(meetup.start).getHours() >= 17 ? "Tonight" : "Today"
+  if (days === 0) return todayWord(meetup)
   if (days === 1) return "Tomorrow"
-  if (days < 14) return "in " + days + " days"
-  return "in " + Math.round(days / 7) + " wks"
+  return "in " + days + " days"
 }
 
 // One line under a meetup's title: "Mon Nov 9 · 6 PM · Frisco · 12 mi".
@@ -212,4 +245,62 @@ function cyclePreset(current, presets, direction) {
   }
   for (var j = 0; j < presets.length; j++) if (presets[j] > v) return presets[j]
   return presets[0]
+}
+
+// What the collapsed "Filter options" row says it holds.
+function optionsSummary(radius, unit, days, includeOnline, reminders) {
+  return radius + " " + unit + " · " + days + " days" + (includeOnline ? " · online too" : "")
+    + (reminders ? " · reminders on" : " · no reminders")
+}
+
+// The largest distance: 5000 miles, or the same in km.
+function maxRadius(unit) {
+  return unit === "km" ? 8050 : 5000
+}
+
+// The same distance in the other unit, rounded to the 5 the setting steps in,
+// so switching miles to km keeps the area you chose (300 mi becomes 485 km).
+function convertRadius(radius, from, to) {
+  var r = clampInt(radius, 5, maxRadius(from), 300)
+  if (from === to) return r
+  var v = to === "km" ? r * KM_PER_MILE : r / KM_PER_MILE
+  return clampInt(Math.round(v / 5) * 5, 5, maxRadius(to), 300)
+}
+
+// Reminders: one the day before and one on the day, each from 9 AM local
+// time (or within 3 hours of an early start). "" when none is due. A meetup
+// that has started gets none.
+var REMIND_HOUR = 9
+function reminderDue(meetup, now) {
+  if (!meetup || meetup.start <= now) return ""
+  var days = daysUntil(meetup.start, now)
+  var morning = new Date(now).getHours() >= REMIND_HOUR
+  if (days === 0) return morning || meetup.start - now <= 3 * 3600000 ? "today" : ""
+  if (days === 1) return morning ? "tomorrow" : ""
+  return ""
+}
+
+// A notification body is markup to the notification service, and Omarchy's
+// decodes entities before drawing, so escaping alone would still let a feed
+// title draw bold or add a link. Instead the three characters markup is made
+// of are swapped for look-alikes that aren't: nothing in the text can be a
+// tag or an entity. (Like every Omarchy notification, a bare web address in
+// the text is still shown as a link.)
+function plainText(value) {
+  return String(value).replace(/&/g, "\uff06").replace(/</g, "\u2039").replace(/>/g, "\u203a")
+}
+
+// Headline (our own words) and body for a reminder. The body is only public
+// feed text: the meetup's name, date, time and city. Never the distance, which
+// would say where you are, since a notification's text passes through process
+// arguments other accounts on the machine can read.
+function reminderText(meetup, kind) {
+  var when = kind === "tomorrow" ? "tomorrow" : todayWord(meetup).toLowerCase()
+  var parts = [formatDate(meetup.start), formatTime(meetup.start)]
+  if (meetup.online) parts.push("Online")
+  else if (meetup.city) parts.push(meetup.city)
+  return {
+    headline: "Omarchy meetup " + when,
+    body: plainText(meetup.title) + "\n" + plainText(parts.join(" · "))
+  }
 }

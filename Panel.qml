@@ -17,10 +17,12 @@ Panel {
   // ---- Settings (inline on the bar entry in shell.json) ---------------------
 
   readonly property string unit: setting("unit", "mi") === "km" ? "km" : "mi"
-  readonly property int radius: Math.max(1, Math.min(20000, Number(setting("radius", 300)) || 300))
-  readonly property int days: Math.max(1, Math.min(365, Number(setting("days", 90)) || 90))
-  readonly property bool includeOnline: setting("includeOnline", false) === true
-  readonly property bool hideWhenNone: setting("hideWhenNone", false) === true
+  // Ranges match manifest.json. Values may arrive as strings from
+  // `omarchy bar set` without --json, so read them leniently.
+  readonly property int radius: Model.clampInt(setting("radius", 300), 5, 5000, 300)
+  readonly property int days: Model.clampInt(setting("days", 90), 7, 365, 90)
+  readonly property bool includeOnline: Model.toBool(setting("includeOnline", false))
+  readonly property bool hideWhenNone: Model.toBool(setting("hideWhenNone", false))
 
   // ---- Data -----------------------------------------------------------------
 
@@ -36,14 +38,19 @@ Panel {
   property bool feedLoaded: false
   property bool fetchFailed: false
 
-  // Where you are: Omarchy's weather location when one is set
-  // (omarchy-weather-location), else where geo.omarchy.org places this
-  // network, the same lookup the weather panel uses.
+  // Where you are: Omarchy's Weather location when one is set
+  // (omarchy-weather-location). Distances need its coordinates; a location
+  // set by name only is respected, not replaced, so the widget then asks you
+  // to add coordinates. Only with no Weather location at all does it ask
+  // geo.omarchy.org where this network is, the lookup the Weather panel makes.
   property var configuredLocation: null
   property var detectedLocation: null
   property bool configuredLoaded: false
-  readonly property var origin: configuredLocation || detectedLocation
   readonly property bool usingWeatherLocation: configuredLocation !== null
+  readonly property bool weatherLocationNeedsCoordinates: usingWeatherLocation && !Model.hasCoordinates(configuredLocation)
+  readonly property var origin: usingWeatherLocation
+    ? (Model.hasCoordinates(configuredLocation) ? configuredLocation : null)
+    : detectedLocation
 
   property double now: Date.now()
 
@@ -86,37 +93,40 @@ Panel {
   // Settings live on this widget's entry in shell.json. omarchy-bar writes it
   // the same way `omarchy bar set` does, and the shell hands the new value
   // straight back through `settings`.
+  // --json stores the number as a number, as the manifest's schema says,
+  // rather than as text.
   function setSetting(key, value) {
-    Quickshell.execDetached(["omarchy-bar", "set", "gleasonmt.meetups", key, String(value)])
+    Quickshell.execDetached(["omarchy-bar", "set", "gleasonmt.meetups", key, JSON.stringify(value), "--json"])
   }
 
+  // fetch.sh, next to this file. The feed is 63 KB today; 2 MB leaves years of
+  // growth, and parseFeed caps every field, so even a full 2 MB stays cheap.
+  readonly property string fetchScript: decodeURIComponent(String(Qt.resolvedUrl("fetch.sh")).replace(/^file:\/\//, ""))
+  readonly property string feedMaxBytes: "2000000"
+  readonly property string geoMaxBytes: "4096"
+
+  // "started", or "busy" when a download is already running in this bar.
   function refresh(force) {
-    if (fetchProc.running) return
-    fetchProc.command = ["bash", "-c", fetchScript, "meetups-fetch",
-      cacheDir, "meetups.json", feedUrl, String(force ? 0 : feedMaxAgeMinutes)]
+    if (fetchProc.running) return "busy"
+    fetchProc.command = ["bash", fetchScript, cacheDir, "meetups.json", feedUrl,
+      String(force ? 0 : feedMaxAgeMinutes), feedMaxBytes]
     fetchProc.running = true
+    return "started"
   }
 
   function detectLocation() {
     if (geoProc.running || !configuredLoaded || configuredLocation !== null) return
-    geoProc.command = ["bash", "-c", fetchScript, "meetups-geo",
-      cacheDir, "location.json", "https://geo.omarchy.org/", String(geoMaxAgeMinutes)]
+    geoProc.command = ["bash", fetchScript, cacheDir, "location.json", "https://geo.omarchy.org/",
+      String(geoMaxAgeMinutes), geoMaxBytes]
     geoProc.running = true
   }
 
-  // Downloads $3 to $1/$2 unless that copy is younger than $4 minutes. Writes
-  // to a temporary file first, so a reader never sees half a download, and
-  // keeps the old copy when the download fails.
-  readonly property string fetchScript: 'dir=$1; file=$dir/$2; url=$3; age=$4
-mkdir -p "$dir" || exit 1
-if [ "$age" -gt 0 ] && [ -n "$(find "$file" -mmin -"$age" 2>/dev/null)" ]; then exit 0; fi
-tmp=$(mktemp "$dir/.dl.XXXXXX") || exit 1
-if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f "$tmp" "$file"; else rm -f "$tmp"; exit 1; fi'
-
   Process {
     id: fetchProc
+    // 2 means another monitor's bar holds the download; its result reaches
+    // this one through the file watch.
     onExited: function(code) {
-      root.fetchFailed = code !== 0
+      if (code !== 2) root.fetchFailed = code !== 0
       feedFile.reload()
     }
   }
@@ -172,6 +182,9 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
     repeat: true
     onTriggered: {
       root.refresh(false)
+      // A watch on weather.json never fires if its folder didn't exist when
+      // the shell started, so look again rather than rely on it.
+      weatherFile.reload()
       root.detectLocation()
     }
   }
@@ -194,6 +207,7 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
 
   onOpenedChanged: if (opened) {
     now = Date.now()
+    weatherFile.reload()
     cursorActive = false
     rowIndex = 0
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -204,7 +218,7 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
     function open(): void { root.open() }
     function close(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function refresh(): string { root.refresh(true); return "ok" }
+    function refresh(): string { return root.refresh(true) }
   }
 
   TextMetrics {
@@ -288,7 +302,7 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
             title: root.next ? root.next.title : "No meetups nearby"
             meta: root.next ? Model.detailLine(root.next, root.unit)
               : (root.origin ? "Nothing within " + root.radius + " " + root.unit + " of " + (root.origin.name || "you") + " in the next " + root.days + " days"
-                 : "Waiting for your location")
+                 : (root.weatherLocationNeedsCoordinates ? "Your Weather location needs coordinates" : "Waiting for your location"))
           }
 
           PanelSeparator { foreground: root.foreground }
@@ -360,7 +374,9 @@ if curl -fsSL --max-time 15 --max-filesize 5000000 "$url" -o "$tmp"; then mv -f 
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             text: {
-              var where = root.origin
+              var where = root.weatherLocationNeedsCoordinates
+                ? "Your Weather location, " + root.configuredLocation.name + ", has no coordinates. Pick it from the Weather panel's search to see distances."
+                : root.origin
                 ? "Near " + (root.origin.name || "you") + (root.usingWeatherLocation ? " (your weather location)" : " (from your network)")
                 : "Location unknown. Set one in the Weather panel."
               var when = root.fetchFailed && !root.feed.ok ? "Couldn't reach omarchy.org. Middle-click to retry."

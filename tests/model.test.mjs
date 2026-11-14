@@ -45,7 +45,13 @@ test("parseFeed survives garbage and a changed shape", () => {
 test("parseLocation reads weather.json and geo.omarchy.org", () => {
   assert.deepEqual(plain(M.parseLocation('{"name":"Carrollton","latitude":32.95373,"longitude":-96.89028,"country":"US"}')),
     { name: "Carrollton", lat: 32.95373, lon: -96.89028 })
-  assert.equal(M.parseLocation('{"name":"Malibu"}'), null)
+  // A name-only location (what `omarchy-weather-location --set Malibu` writes)
+  // is a location to respect, just one without coordinates.
+  assert.deepEqual(plain(M.parseLocation('{"name":"Malibu"}')), { name: "Malibu", lat: null, lon: null })
+  assert.equal(M.hasCoordinates(M.parseLocation('{"name":"Malibu"}')), false)
+  assert.equal(M.parseLocation('{"latitude":"x"}'), null)
+  assert.equal(M.parseLocation('[1,2]'), null)
+  assert.equal(M.hasCoordinates(M.parseLocation('{"name":"Bad","latitude":95,"longitude":10}')), false, "out-of-range latitude")
   assert.equal(M.parseLocation(""), null)
 })
 
@@ -115,4 +121,33 @@ test("cyclePreset steps through presets both ways and wraps", () => {
   assert.equal(M.cyclePreset(25, p, -1), 1000)
   assert.equal(M.cyclePreset(150, p, 1), 300, "a hand-set value steps to the next preset")
   assert.equal(M.cyclePreset(150, p, -1), 100)
+})
+
+test("every string from the network is capped, so a huge field can't stall the shell", () => {
+  const huge = "x".repeat(5_000_000)
+  const parsed = M.parseFeed(feed([{ ...dfw, title: huge, city: huge, country: huge, id: huge }], { refreshed: huge }))
+  const e = parsed.events[0]
+  assert.equal(e.title.length, M.MAX_TEXT)
+  assert.equal(e.city.length, M.MAX_SHORT)
+  assert.equal(e.country.length, M.MAX_SHORT)
+  assert.equal(e.id.length, M.MAX_SHORT)
+  assert.equal(parsed.refreshed.length, M.MAX_SHORT)
+  assert.equal(M.parseLocation(JSON.stringify({ name: huge, latitude: 1, longitude: 2 })).name.length, M.MAX_SHORT)
+  assert.equal(M.parseFeed(feed([{ ...dfw, url: "https://luma.com/" + huge }])).events.length, 0, "an over-long link is dropped, not cut")
+})
+
+test("hostile names and coordinates don't break parsing", () => {
+  const parsed = M.parseFeed(feed([{ ...dfw, title: "<img src=x onerror=alert(1)>", id: "__proto__", geo: { lat: 200, lon: 0 } }]))
+  assert.equal(parsed.events[0].title, "<img src=x onerror=alert(1)>", "kept as text; the panel shows it as plain text")
+  assert.equal(parsed.events[0].lat, null, "latitude 200 is not a place")
+})
+
+test("settings set from a terminal without --json still work", () => {
+  assert.equal(M.toBool(true), true)
+  assert.equal(M.toBool("true"), true)
+  assert.equal(M.toBool("false"), false)
+  assert.equal(M.toBool(false), false)
+  assert.equal(M.clampInt("500", 5, 5000, 300), 500)
+  assert.equal(M.clampInt(99999, 5, 5000, 300), 5000)
+  assert.equal(M.clampInt("lots", 5, 5000, 300), 300)
 })

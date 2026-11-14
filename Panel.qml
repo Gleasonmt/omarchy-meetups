@@ -62,8 +62,8 @@ Panel {
   // ---- Panel cursor ---------------------------------------------------------
 
   // Rows, top to bottom: the meetups (or, when there are none, "Host one"),
-  // "All meetups", then the settings: Distance, Look ahead, Units, Online
-  // meetups, Reminders.
+  // "All meetups", "Filter options", and, while that is open, the settings:
+  // Distance, Look ahead, Units, Online meetups, Reminders.
   property int rowIndex: 0
   property bool cursorActive: false
   readonly property int maxRows: 8
@@ -71,12 +71,16 @@ Panel {
   readonly property bool showHost: shownMeetups === 0
   readonly property int hostRow: showHost ? 0 : -1
   readonly property int allRow: shownMeetups + (showHost ? 1 : 0)
-  readonly property int distanceRow: allRow + 1
-  readonly property int daysRow: allRow + 2
-  readonly property int unitRow: allRow + 3
-  readonly property int onlineRow: allRow + 4
-  readonly property int remindRow: allRow + 5
-  readonly property int rowCount: allRow + 6
+  readonly property int optionsRow: allRow + 1
+  // Closed by default so the list stays short; stays as you left it until
+  // the shell restarts.
+  property bool optionsOpen: false
+  readonly property int distanceRow: optionsOpen ? allRow + 2 : -1
+  readonly property int daysRow: optionsOpen ? allRow + 3 : -1
+  readonly property int unitRow: optionsOpen ? allRow + 4 : -1
+  readonly property int onlineRow: optionsOpen ? allRow + 5 : -1
+  readonly property int remindRow: optionsOpen ? allRow + 6 : -1
+  readonly property int rowCount: allRow + (optionsOpen ? 7 : 2)
 
   readonly property var distancePresets: unit === "km" ? [50, 100, 250, 500, 1000] : [25, 50, 100, 300, 500, 1000]
   readonly property var dayPresets: [14, 30, 90, 180, 365]
@@ -95,6 +99,7 @@ Panel {
     if (i < shownMeetups) openUrl(meetups[i].url)
     else if (i === hostRow) openUrl(hostUrl)
     else if (i === allRow) openUrl("https://omarchy.org/meetups/")
+    else if (i === optionsRow) optionsOpen = !optionsOpen
     else if (i === distanceRow) setSetting("radius", Model.cyclePreset(radius, distancePresets, direction || 1))
     else if (i === daysRow) setSetting("days", Model.cyclePreset(days, dayPresets, direction || 1))
     else if (i === unitRow) switchUnit()
@@ -165,7 +170,75 @@ Panel {
     }
   }
 
-  onMeetupsChanged: checkReminders()
+  onMeetupsChanged: {
+    checkReminders()
+    fetchCovers()
+  }
+
+  // ---- Covers ---------------------------------------------------------------
+
+  // Each listed meetup's cover image from omarchy.org, through fetch.sh like
+  // the list (https only, 1 MB cap; they are about 100 KB), into covers/ in
+  // the cache, one at a time, kept a week. Model.coverPath only lets through
+  // omarchy.org's own /images/meetups/<name>.webp paths, so the name is safe
+  // as a file name. Images are decoded at the size shown (sourceSize).
+  readonly property string coversDir: cacheDir + "/covers"
+  readonly property string coverMaxBytes: "1000000"
+  readonly property int coverMaxAgeMinutes: 10080
+  property var coverReady: ({})
+  property var coverQueue: []
+
+  function coverSource(path) {
+    var name = Model.coverName(path)
+    return name && coverReady[name] ? "file://" + coversDir + "/" + name : ""
+  }
+
+  function fetchCovers() {
+    var queue = coverQueue.slice()
+    var shown = meetups.slice(0, maxRows)
+    for (var i = 0; i < shown.length; i++) {
+      var name = Model.coverName(shown[i].cover)
+      if (name && !coverReady[name] && queue.indexOf(shown[i].cover) < 0) queue.push(shown[i].cover)
+    }
+    coverQueue = queue
+    nextCover()
+  }
+
+  function nextCover() {
+    if (coverProc.running || coverQueue.length === 0) return
+    var path = coverQueue[0]
+    coverProc.name = Model.coverName(path)
+    coverProc.command = ["bash", fetchScript, coversDir, coverProc.name, Model.coverUrl(path),
+      String(coverMaxAgeMinutes), coverMaxBytes]
+    coverProc.running = true
+  }
+
+  Process {
+    id: coverProc
+    property string name: ""
+    onExited: function(code) {
+      var queue = root.coverQueue.slice(1)
+      if (code === 0) {
+        var ready = Object.assign({}, root.coverReady)
+        ready[name] = true
+        root.coverReady = ready
+      } else if (code === 2) {
+        // Another monitor's bar is fetching this one; ask again shortly.
+        coverRetry.start()
+      }
+      root.coverQueue = queue
+      if (queue.length > 0) root.nextCover()
+      else coverPrune.running = true
+    }
+  }
+
+  Timer { id: coverRetry; interval: 3000; onTriggered: root.fetchCovers() }
+
+  // Covers of meetups long gone: removed after 30 days unused.
+  Process {
+    id: coverPrune
+    command: ["find", root.coversDir, "-maxdepth", "1", "-type", "f", "-mtime", "+30", "-delete"]
+  }
 
   function detectLocation() {
     if (geoProc.running || !configuredLoaded || configuredLocation !== null) return
@@ -316,7 +389,7 @@ Panel {
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
-        if (dx !== 0 && dy === 0 && root.rowIndex >= root.distanceRow) {
+        if (dx !== 0 && dy === 0 && root.optionsOpen && root.rowIndex >= root.distanceRow) {
           // Left/Right step Distance and Look ahead; on the switches below
           // them either key flips the switch.
           root.activateRow(root.rowIndex, dx > 0 ? 1 : -1)
@@ -350,11 +423,11 @@ Panel {
             foreground: root.foreground
             fontFamily: root.fontFamily
             iconComponent: Component {
-              Text {
-                text: "\u{f0849}"
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.display
+              Cover {
+                size: Style.space(72)
+                source: root.next ? root.coverSource(root.next.cover) : ""
+                glyph: "\u{f0849}"
+                glyphSize: Style.font.display
               }
             }
             title: root.next ? root.next.title : "No meetups nearby"
@@ -384,6 +457,7 @@ Panel {
                 width: parent.width
                 rowIndex: index
                 glyph: modelData.online ? "\u{f059f}" : "\u{f034e}"
+                cover: root.coverSource(modelData.cover)
                 label: modelData.title
                 caption: Model.detailLine(modelData, root.unit)
                 onActivated: root.openUrl(modelData.url)
@@ -413,9 +487,19 @@ Panel {
 
           PanelSeparator { foreground: root.foreground }
 
-          // The two settings most people want, changeable right here: click
-          // for the next preset, right-click (or Left) for the one before.
           MeetupRow {
+            width: parent.width
+            rowIndex: root.optionsRow
+            glyph: root.optionsOpen ? "\u{f0140}" : "\u{f0142}"
+            label: "Filter options"
+            caption: Model.optionsSummary(root.radius, root.unit, root.days, root.includeOnline, root.reminders)
+            onActivated: root.activateRow(root.optionsRow)
+          }
+
+          // The settings, changeable right here: click for the next preset,
+          // right-click (or Left) for the one before; the switches flip.
+          MeetupRow {
+            visible: root.optionsOpen
             width: parent.width
             rowIndex: root.distanceRow
             glyph: "\u{f08f0}"
@@ -425,6 +509,7 @@ Panel {
           }
 
           MeetupRow {
+            visible: root.optionsOpen
             width: parent.width
             rowIndex: root.daysRow
             glyph: "\u{f00ed}"
@@ -434,6 +519,7 @@ Panel {
           }
 
           MeetupRow {
+            visible: root.optionsOpen
             width: parent.width
             rowIndex: root.unitRow
             glyph: "\u{f046d}"
@@ -443,6 +529,7 @@ Panel {
           }
 
           MeetupRow {
+            visible: root.optionsOpen
             width: parent.width
             rowIndex: root.onlineRow
             glyph: "\u{f059f}"
@@ -452,6 +539,7 @@ Panel {
           }
 
           MeetupRow {
+            visible: root.optionsOpen
             width: parent.width
             rowIndex: root.remindRow
             glyph: root.reminders ? "\u{f009a}" : "\u{f009b}"
@@ -489,6 +577,7 @@ Panel {
     id: row
     property int rowIndex: 0
     property string glyph: ""
+    property string cover: ""
     property string label: ""
     property string caption: ""
     signal activated(int direction)
@@ -514,12 +603,11 @@ Panel {
       anchors.rightMargin: Style.space(10)
       spacing: Style.space(8)
 
-      Text {
-        textFormat: Text.PlainText
-        text: row.glyph
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.icon
+      Cover {
+        size: row.cover ? Style.space(40) : Style.font.icon
+        source: row.cover
+        glyph: row.glyph
+        glyphSize: Style.font.icon
         Layout.alignment: Qt.AlignVCenter
       }
 
@@ -549,6 +637,44 @@ Panel {
           elide: Text.ElideRight
         }
       }
+    }
+  }
+
+  // A meetup's cover, cropped square, or its glyph while there is none (no
+  // cover listed, not downloaded yet, or an image that won't decode).
+  component Cover: Item {
+    id: cover
+    property real size: Style.font.icon
+    property string source: ""
+    property string glyph: ""
+    property real glyphSize: Style.font.icon
+    readonly property bool showing: image.status === Image.Ready
+
+    implicitWidth: showing ? size : glyphText.implicitWidth
+    implicitHeight: showing ? size : glyphText.implicitHeight
+
+    Image {
+      id: image
+      anchors.fill: parent
+      visible: cover.showing
+      source: cover.source
+      asynchronous: true
+      fillMode: Image.PreserveAspectCrop
+      sourceSize.width: Math.ceil(cover.size * 2)
+      sourceSize.height: Math.ceil(cover.size * 2)
+      smooth: true
+      mipmap: true
+    }
+
+    Text {
+      id: glyphText
+      anchors.centerIn: parent
+      visible: !cover.showing
+      textFormat: Text.PlainText
+      text: cover.glyph
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: cover.glyphSize
     }
   }
 }

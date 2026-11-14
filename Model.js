@@ -17,6 +17,25 @@ function text(value, max) {
   return String(value === undefined || value === null ? "" : value).slice(0, max).trim()
 }
 
+// A meetup's cover image, as omarchy.org lists it: a path on omarchy.org
+// such as "/images/meetups/evt-U925QBQtzBf2iX3-full.webp". Only that shape is
+// kept, so the file name is safe to use in the cache folder and the download
+// can only ever come from omarchy.org's meetup images. Anything else: "".
+var COVER_PATH = /^\/images\/meetups\/([A-Za-z0-9_-]{1,80}\.(webp|png|jpe?g))$/
+function coverPath(value) {
+  var path = typeof value === "string" ? value : ""
+  return COVER_PATH.test(path) ? path : ""
+}
+
+function coverName(path) {
+  var m = COVER_PATH.exec(String(path || ""))
+  return m ? m[1] : ""
+}
+
+function coverUrl(path) {
+  return coverPath(path) ? "https://omarchy.org" + path : ""
+}
+
 function coordinate(value, limit) {
   var n = parseFloat(value)
   return isNaN(n) || Math.abs(n) > limit ? null : n
@@ -55,6 +74,7 @@ function parseFeed(raw) {
       city: text(e.city, MAX_SHORT),
       country: text(e.country, MAX_SHORT),
       online: e.online === true,
+      cover: coverPath(e.cover),
       lat: lat === null || lon === null ? null : lat,
       lon: lat === null || lon === null ? null : lon
     })
@@ -137,7 +157,7 @@ function upcoming(events, origin, radius, unit, includeOnline, now, days) {
     }
     out.push({
       id: e.id, title: e.title, url: e.url, start: e.start, end: e.end,
-      city: e.city, country: e.country, online: e.online,
+      city: e.city, country: e.country, online: e.online, cover: e.cover || "",
       distance: km === null ? null : fromKm(km, unit)
     })
   }
@@ -217,6 +237,12 @@ function cyclePreset(current, presets, direction) {
   }
   for (var j = 0; j < presets.length; j++) if (presets[j] > v) return presets[j]
   return presets[0]
+}
+
+// What the collapsed "Filter options" row says it holds.
+function optionsSummary(radius, unit, days, includeOnline, reminders) {
+  return radius + " " + unit + " · " + days + " days" + (includeOnline ? " · online too" : "")
+    + (reminders ? " · reminders on" : " · no reminders")
 }
 
 // The same distance in the other unit, rounded to the 5 the setting steps in,

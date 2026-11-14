@@ -192,3 +192,27 @@ test("reminder text escapes the feed's markup", () => {
   const lunch = { ...meetup, start: Date.parse("2026-11-09T18:00:00Z") }
   assert.equal(M.reminderText(lunch, "today", "mi").headline, "Omarchy meetup today")
 })
+
+test("covers: only omarchy.org's meetup image paths are kept", () => {
+  const good = "/images/meetups/evt-U925QBQtzBf2iX3-full.webp"
+  const events = M.parseFeed(feed([{ ...dfw, cover: good }])).events
+  assert.equal(events[0].cover, good)
+  assert.equal(M.upcoming(events, carrollton, 50, "mi", false, Date.parse("2026-11-09T15:00:00Z"))[0].cover, good)
+  assert.equal(M.coverName(good), "evt-U925QBQtzBf2iX3-full.webp")
+  assert.equal(M.coverUrl(good), "https://omarchy.org/images/meetups/evt-U925QBQtzBf2iX3-full.webp")
+  for (const bad of [
+    "https://evil.example/x.webp", "//evil.example/images/meetups/x.webp", "/images/meetups/../../x.webp",
+    "/images/meetups/a/b.webp", "/images/meetups/x.svg", "/images/meetups/.webp", "/images/meetups/x.webp?y",
+    "/images/meetups/x.webp\n", "/images/meetups/" + "a".repeat(81) + ".webp", "images/meetups/x.webp",
+    "/images/meetups/x y.webp", null, 42, { toString: () => good }]) {
+    assert.equal(M.parseFeed(feed([{ ...dfw, cover: bad }])).events[0].cover, "", String(bad))
+    assert.equal(M.coverName(typeof bad === "string" ? bad : ""), "")
+    assert.equal(M.coverUrl(bad), "")
+  }
+  assert.equal(M.parseFeed(feed([dfw])).events[0].cover, "", "no cover is fine")
+})
+
+test("the collapsed options row sums up the settings", () => {
+  assert.equal(M.optionsSummary(300, "mi", 90, false, true), "300 mi · 90 days · reminders on")
+  assert.equal(M.optionsSummary(485, "km", 30, true, false), "485 km · 30 days · online too · no reminders")
+})

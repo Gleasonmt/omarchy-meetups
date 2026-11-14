@@ -15,7 +15,8 @@ omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
 
 ## What it looks like
 
-The list, with its settings right there underneath. It wears whatever theme you're using:
+The list, with each meetup's cover image, and its settings folded under **Filter options**. It
+wears whatever theme you're using:
 
 | Tokyo Night | Another theme |
 |---|---|
@@ -66,6 +67,9 @@ request, both plain HTTPS GETs:
   about 63 KB)
 - `geo.omarchy.org`, only when no Weather location is set at all, at most once a day (capped at
   4 KB)
+- `omarchy.org/images/meetups/…`, the cover image of each meetup in your list, kept a week
+  (capped at 1 MB; they are about 100 KB). Only image paths of exactly that form are fetched, and
+  covers are removed from the cache 30 days after their last download.
 
 Both answers are read as JSON, every field is cut to a length the panel can show, and nothing
 downloaded is ever run. A meetup's name and place are escaped before they go into a reminder, so
@@ -73,7 +77,8 @@ they always show as written. Cached files and reminder records are readable only
 
 ## Settings
 
-The settings are at the bottom of the widget's list:
+The settings are under **Filter options** at the bottom of the widget's list (click it, or press
+Enter on it, to open them):
 
 - **Distance** and **Look ahead**: click to step up through common values, right-click to step
   back (or use the arrow keys).

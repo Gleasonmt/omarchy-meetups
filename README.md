@@ -48,7 +48,8 @@ What the bar shows:
   within the hour, or as soon as you open the list.
 - **Times** are shown in your own time zone.
 - **Reminders**: for each meetup in range, one notification the day before and one on the day,
-  from 9 AM (or within 3 hours of an earlier start). Click it to open the meetup's page. Each is sent
+  from 9 AM (or within 3 hours of an earlier start), with the meetup's name, date, time and city
+  (never its distance from you). Click it to open the meetup's page. Each is sent
   once, however many monitors you have, and recorded as an empty file in
   `${XDG_STATE_HOME:-~/.local/state}/gleasonmt-meetups/reminded/` (removed after 60 days). Turn
   them off in the list.
@@ -59,21 +60,27 @@ What the bar shows:
 
 Everything it needs comes with Omarchy: `curl` and `bash` to fetch, `omarchy-launch-browser` to
 open links, `omarchy-notification-send` for reminders, and `omarchy-bar` to save the settings you
-change in the panel. It makes two kinds of
-request, both plain HTTPS GETs:
+change in the panel. It makes three kinds of request, all plain HTTPS GETs:
 
 - `raw.githubusercontent.com/omacom/omarchy-site/master/src/data/meetups.json`, omarchy.org's
   meetup list, when the cached copy is over six hours old or you refresh (capped at 2 MB; it is
   about 63 KB)
 - `geo.omarchy.org`, only when no Weather location is set at all, at most once a day (capped at
   4 KB)
-- `omarchy.org/images/meetups/…`, the cover image of each meetup in your list, kept a week
-  (capped at 1 MB; they are about 100 KB). Only image paths of exactly that form are fetched, and
-  covers are removed from the cache 30 days after their last download.
+- `omarchy.org/images/meetups/<name>.webp`, the cover image of each meetup in your list, kept a
+  week (capped at 1 MB; they are about 100 KB). Only image paths of exactly that form are fetched.
 
-Both answers are read as JSON, every field is cut to a length the panel can show, and nothing
-downloaded is ever run. A meetup's name and place are escaped before they go into a reminder, so
-they always show as written. Cached files and reminder records are readable only by you.
+The list and the location are read as JSON, and every field is cut to a length the panel can show.
+A cover is downloaded to a folder the panel never reads, and moved where it is shown only if its
+bytes are a still WebP image no larger than 2000×2000; anything else (PNG, JPEG, an animation,
+whatever its name says) is deleted, and the meetup keeps its icon. Covers are only ever shown,
+and nothing downloaded is ever run. Offline, the last good cover is kept; covers are removed 30
+days after their last download, checked when the shell starts and after each round of downloads.
+
+A meetup's name and place have `<`, `>` and `&` swapped for look-alike characters before they go
+into a reminder, so nothing in them can format the notification or add a link of its own (a bare
+web address is still shown as a link, as in every Omarchy notification). Cached files and
+reminder records are readable only by you.
 
 ## Settings
 
@@ -82,7 +89,8 @@ Enter on it, to open them):
 
 - **Distance** and **Look ahead**: click to step up through common values, right-click to step
   back (or use the arrow keys).
-- **Units**: miles or kilometers. Switching converts the distance, so 300 mi becomes 485 km.
+- **Units**: miles or kilometers. Switching converts the distance, so 300 mi becomes 485 km
+  (and the largest, 5000 mi, becomes 8045 km).
 - **Online meetups**: shown or hidden (hidden by default, since they have no distance).
 - **Reminders**: on or off (on by default).
 
@@ -101,7 +109,7 @@ They're stored on the widget's entry in `~/.config/omarchy/shell.json`, which yo
 
 | key | default | |
 |---|---|---|
-| `radius` | `300` | how far to look (5–5000) |
+| `radius` | `300` | how far to look (5–5000 mi, 5–8050 km) |
 | `days` | `90` | how many days ahead to look (7–365) |
 | `unit` | `mi` | `mi` or `km` |
 | `includeOnline` | `false` | also list online meetups |
@@ -122,9 +130,10 @@ rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/gleasonmt-meetups" "${XDG_STATE_HOME:-$H
 
 ## Development
 
-The logic lives in `Model.js`, the download in `fetch.sh` and the send-once reminder in
-`remind.sh`; all three are tested under Node (the script tests use a stub `curl` and a stub
-`omarchy-notification-send`):
+The logic lives in `Model.js`, the downloads in `fetch.sh`, the cover check in `cover.sh` and the
+send-once reminder in `remind.sh`; all four are tested under Node (the script tests use a stub
+`curl` and a stub `omarchy-notification-send`). Where Omarchy is installed, a test also runs
+reminder text through Omarchy's own notification markup code:
 
 ```bash
 node --test tests/*.test.mjs

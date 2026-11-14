@@ -32,10 +32,10 @@
         "type": "integer",
         "label": "Distance",
         "min": 5,
-        "max": 5000,
+        "max": 8050,
         "step": 5,
         "defaultValue": 300,
-        "description": "Show meetups within this distance of your Weather location (5 to 5000)."
+        "description": "Show meetups within this distance of your Weather location (5 to 5000 mi, or 8050 km)."
       },
       {
         "key": "days",

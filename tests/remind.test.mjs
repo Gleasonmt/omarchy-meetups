@@ -17,6 +17,8 @@ function sandbox() {
   writeFileSync(join(bin, "omarchy-notification-send"), `#!/usr/bin/env bash
 [ -n "\${STUB_SLEEP:-}" ] && sleep "$STUB_SLEEP"
 { printf '%s\\n' "$@"; echo --; } >> "$STUB_LOG"
+# Stand-in for the shell being killed mid-send: the whole process group goes.
+if [ -n "\${STUB_KILL:-}" ]; then kill -9 0; fi
 `)
   chmodSync(join(bin, "omarchy-notification-send"), 0o755)
   // find runs inside the lock, just before the check. This stub notes when
@@ -36,7 +38,7 @@ exec ${spawnSync("bash", ["-c", "command -v find"], { encoding: "utf8" }).stdout
   const overlap = join(root, "overlap")
   const env = extra => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, STUB_LOG: log,
     STUB_INSIDE: join(root, "inside"), STUB_OVERLAP: overlap, ...extra })
-  const args = (key = KEY) => ["-c", `umask 022; exec bash "$0" "$@"`, script, dir, key, "Omarchy meetup tomorrow", "Body", "--exec", "omarchy-launch-browser", "https://luma.com/x"]
+  const args = (key = KEY) => ["-c", `umask 022; exec setsid -w bash "$0" "$@"`, script, dir, key, "Omarchy meetup tomorrow", "Body", "--exec", "omarchy-launch-browser", "https://luma.com/x"]
   const run = (key, extra = {}) => spawnSync("bash", args(key), { env: env(extra), encoding: "utf8" })
   const start = (key, extra = {}) => new Promise(done => spawn("bash", args(key), { env: env(extra) }).on("exit", done))
   const sent = () => existsSync(log) ? readFileSync(log, "utf8").split("--\n").filter(Boolean) : []
@@ -96,4 +98,12 @@ test("records older than 60 days are removed, newer ones kept", () => {
   assert.ok(!existsSync(join(s.dir, old)))
   assert.ok(existsSync(join(s.dir, recent)))
   assert.ok(existsSync(join(s.dir, "notes.txt")), "only its own records are touched")
+})
+
+test("the record is written before sending: killed mid-send, it is never sent again", () => {
+  const s = sandbox()
+  s.run(KEY, { STUB_KILL: "1" })
+  assert.equal(s.sent().length, 1, "the first attempt reached the sender")
+  assert.equal(s.run().status, 0)
+  assert.equal(s.sent().length, 1, "no second notification")
 })

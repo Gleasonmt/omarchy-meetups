@@ -19,7 +19,7 @@ Panel {
   readonly property string unit: setting("unit", "mi") === "km" ? "km" : "mi"
   // Ranges match manifest.json. Values may arrive as strings from
   // `omarchy bar set` without --json, so read them leniently.
-  readonly property int radius: Model.clampInt(setting("radius", 300), 5, 5000, 300)
+  readonly property int radius: Model.clampInt(setting("radius", 300), 5, Model.maxRadius(unit), 300)
   readonly property int days: Model.clampInt(setting("days", 90), 7, 365, 90)
   readonly property bool includeOnline: Model.toBool(setting("includeOnline", false))
   readonly property bool hideWhenNone: Model.toBool(setting("hideWhenNone", false))
@@ -161,7 +161,7 @@ Panel {
       var key = Qt.md5(m.id + "|" + m.start + "|" + kind)
       if (sentHere[key]) continue
       sentHere[key] = true
-      var t = Model.reminderText(m, kind, unit)
+      var t = Model.reminderText(m, kind)
       // Clicking the notification opens the meetup's page; the link is the
       // feed's https URL, one argument, never parsed by a shell.
       Quickshell.execDetached(["bash", remindScript, stateDir, key,
@@ -177,12 +177,14 @@ Panel {
 
   // ---- Covers ---------------------------------------------------------------
 
-  // Each listed meetup's cover image from omarchy.org, through fetch.sh like
-  // the list (https only, 1 MB cap; they are about 100 KB), into covers/ in
-  // the cache, one at a time, kept a week. Model.coverPath only lets through
-  // omarchy.org's own /images/meetups/<name>.webp paths, so the name is safe
-  // as a file name. Images are decoded at the size shown (sourceSize).
+  // Each listed meetup's cover image from omarchy.org, through cover.sh: an
+  // https download capped at 1 MB (they are about 100 KB) that reaches
+  // covers/, where it is shown, only once its bytes are checked to be a still
+  // WebP no larger than 2000x2000. One at a time, kept a week; offline, the
+  // last good copy is shown. Model.coverPath only lets through omarchy.org's
+  // own /images/meetups/<name>.webp paths, so the name is safe as a file name.
   readonly property string coversDir: cacheDir + "/covers"
+  readonly property string coverScript: decodeURIComponent(String(Qt.resolvedUrl("cover.sh")).replace(/^file:\/\//, ""))
   readonly property string coverMaxBytes: "1000000"
   readonly property int coverMaxAgeMinutes: 10080
   property var coverReady: ({})
@@ -190,7 +192,7 @@ Panel {
 
   function coverSource(path) {
     var name = Model.coverName(path)
-    return name && coverReady[name] ? "file://" + coversDir + "/" + name : ""
+    return name && coverReady[name] ? Model.fileUrl(coversDir + "/" + name) : ""
   }
 
   function fetchCovers() {
@@ -208,7 +210,7 @@ Panel {
     if (coverProc.running || coverQueue.length === 0) return
     var path = coverQueue[0]
     coverProc.name = Model.coverName(path)
-    coverProc.command = ["bash", fetchScript, coversDir, coverProc.name, Model.coverUrl(path),
+    coverProc.command = ["bash", coverScript, coversDir, coverProc.name, Model.coverUrl(path),
       String(coverMaxAgeMinutes), coverMaxBytes]
     coverProc.running = true
   }
@@ -234,10 +236,11 @@ Panel {
 
   Timer { id: coverRetry; interval: 3000; onTriggered: root.fetchCovers() }
 
-  // Covers of meetups long gone: removed after 30 days unused.
+  // Covers of meetups long gone: removed 30 days after their last download,
+  // checked at startup and after each round of downloads.
   Process {
     id: coverPrune
-    command: ["find", root.coversDir, "-maxdepth", "1", "-type", "f", "-mtime", "+30", "-delete"]
+    command: ["find", root.coversDir, "-type", "f", "-mtime", "+30", "-delete"]
   }
 
   function detectLocation() {
@@ -326,7 +329,10 @@ Panel {
     }
   }
 
-  Component.onCompleted: refresh(false)
+  Component.onCompleted: {
+    refresh(false)
+    coverPrune.running = true
+  }
 
   // ---- Bar ------------------------------------------------------------------
 

@@ -21,7 +21,9 @@ function text(value, max) {
 // such as "/images/meetups/evt-U925QBQtzBf2iX3-full.webp". Only that shape is
 // kept, so the file name is safe to use in the cache folder and the download
 // can only ever come from omarchy.org's meetup images. Anything else: "".
-var COVER_PATH = /^\/images\/meetups\/([A-Za-z0-9_-]{1,80}\.(webp|png|jpe?g))$/
+// WebP only (every cover omarchy.org lists is one); cover.sh also checks the
+// downloaded bytes really are a still WebP of sane size before it is shown.
+var COVER_PATH = /^\/images\/meetups\/([A-Za-z0-9_-]{1,80}\.webp)$/
 function coverPath(value) {
   var path = typeof value === "string" ? value : ""
   return COVER_PATH.test(path) ? path : ""
@@ -34,6 +36,12 @@ function coverName(path) {
 
 function coverUrl(path) {
   return coverPath(path) ? "https://omarchy.org" + path : ""
+}
+
+// A file:// URL for a local path, each segment percent-encoded, so a home or
+// cache folder with "#", "%" or "?" in its name still works.
+function fileUrl(path) {
+  return "file://" + String(path).split("/").map(encodeURIComponent).join("/")
 }
 
 function coordinate(value, limit) {
@@ -245,13 +253,18 @@ function optionsSummary(radius, unit, days, includeOnline, reminders) {
     + (reminders ? " · reminders on" : " · no reminders")
 }
 
+// The largest distance: 5000 miles, or the same in km.
+function maxRadius(unit) {
+  return unit === "km" ? 8050 : 5000
+}
+
 // The same distance in the other unit, rounded to the 5 the setting steps in,
 // so switching miles to km keeps the area you chose (300 mi becomes 485 km).
 function convertRadius(radius, from, to) {
-  var r = clampInt(radius, 5, 5000, 300)
+  var r = clampInt(radius, 5, maxRadius(from), 300)
   if (from === to) return r
   var v = to === "km" ? r * KM_PER_MILE : r / KM_PER_MILE
-  return clampInt(Math.round(v / 5) * 5, 5, 5000, 300)
+  return clampInt(Math.round(v / 5) * 5, 5, maxRadius(to), 300)
 }
 
 // Reminders: one the day before and one on the day, each from 9 AM local
@@ -267,17 +280,27 @@ function reminderDue(meetup, now) {
   return ""
 }
 
-// A notification body is markup to the notification service, so text from
-// the feed is escaped and always shows as written.
-function escapeMarkup(value) {
-  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+// A notification body is markup to the notification service, and Omarchy's
+// decodes entities before drawing, so escaping alone would still let a feed
+// title draw bold or add a link. Instead the three characters markup is made
+// of are swapped for look-alikes that aren't: nothing in the text can be a
+// tag or an entity. (Like every Omarchy notification, a bare web address in
+// the text is still shown as a link.)
+function plainText(value) {
+  return String(value).replace(/&/g, "\uff06").replace(/</g, "\u2039").replace(/>/g, "\u203a")
 }
 
-// Headline (plain text, our own words) and body (markup) for a reminder.
-function reminderText(meetup, kind, unit) {
+// Headline (our own words) and body for a reminder. The body is only public
+// feed text: the meetup's name, date, time and city. Never the distance, which
+// would say where you are, since a notification's text passes through process
+// arguments other accounts on the machine can read.
+function reminderText(meetup, kind) {
   var when = kind === "tomorrow" ? "tomorrow" : todayWord(meetup).toLowerCase()
+  var parts = [formatDate(meetup.start), formatTime(meetup.start)]
+  if (meetup.online) parts.push("Online")
+  else if (meetup.city) parts.push(meetup.city)
   return {
     headline: "Omarchy meetup " + when,
-    body: escapeMarkup(meetup.title) + "\n" + escapeMarkup(detailLine(meetup, unit))
+    body: plainText(meetup.title) + "\n" + plainText(parts.join(" · "))
   }
 }

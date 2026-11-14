@@ -18,9 +18,16 @@ omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
 The list, with each meetup's cover image. Its settings fold away under **Filter options** and open
 with a click. It wears whatever theme you're using:
 
-| The list | Filter options open |
-|---|---|
-| ![The list, headed by Omarchy DFW 002 in Dallas with its skyline cover](media/panel.png) | ![The list with Filter options open: distance, look ahead, units, online meetups and reminders](media/panel-options-open.png) |
+<table>
+  <tr>
+    <th>The list</th>
+    <th>Filter options open</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="media/panel.png" width="400" alt="The list, headed by Omarchy DFW 002 in Dallas with its skyline cover"></td>
+    <td valign="top"><img src="media/panel-options-open.png" width="400" alt="The same list with Filter options open: distance, look ahead, units, online meetups and reminders"></td>
+  </tr>
+</table>
 
 What the bar shows:
 

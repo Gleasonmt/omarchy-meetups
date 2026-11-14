@@ -6,6 +6,22 @@
 
 var KM_PER_MILE = 1.609344
 
+// Every string from the network is cut to a length the panel can show, so a
+// huge field can't stall the shell laying it out. Real titles run to about 80
+// characters; links longer than MAX_URL are dropped rather than cut.
+var MAX_TEXT = 200
+var MAX_SHORT = 80
+var MAX_URL = 2048
+
+function text(value, max) {
+  return String(value === undefined || value === null ? "" : value).slice(0, max).trim()
+}
+
+function coordinate(value, limit) {
+  var n = parseFloat(value)
+  return isNaN(n) || Math.abs(n) > limit ? null : n
+}
+
 // The feed is omarchy.org's own data file, not a promised API, so read it
 // defensively: anything without a title, a link and a start time is dropped,
 // and a changed shape gives an empty list rather than an error.
@@ -22,32 +38,35 @@ function parseFeed(raw) {
   for (var i = 0; i < list.length; i++) {
     var e = list[i]
     if (!e || typeof e !== "object") continue
-    var start = Date.parse(e.start)
-    var title = String(e.title || "").trim()
+    var start = Date.parse(text(e.start, MAX_SHORT))
+    var title = text(e.title, MAX_TEXT)
     var url = String(e.url || "")
-    if (!title || isNaN(start) || !/^https:\/\//.test(url)) continue
-    var end = Date.parse(e.end)
+    if (!title || isNaN(start) || url.length > MAX_URL || !/^https:\/\//.test(url)) continue
+    var end = Date.parse(text(e.end, MAX_SHORT))
     var geo = e.geo && typeof e.geo === "object" ? e.geo : null
-    var lat = geo ? parseFloat(geo.lat) : NaN
-    var lon = geo ? parseFloat(geo.lon) : NaN
+    var lat = geo ? coordinate(geo.lat, 90) : null
+    var lon = geo ? coordinate(geo.lon, 180) : null
     events.push({
-      id: String(e.id || url),
+      id: text(e.id, MAX_SHORT) || url,
       title: title,
       url: url,
       start: start,
       end: isNaN(end) ? start + 2 * 3600 * 1000 : end,
-      city: String(e.city || ""),
-      country: String(e.country || ""),
+      city: text(e.city, MAX_SHORT),
+      country: text(e.country, MAX_SHORT),
       online: e.online === true,
-      lat: isNaN(lat) ? null : lat,
-      lon: isNaN(lon) ? null : lon
+      lat: lat === null || lon === null ? null : lat,
+      lon: lat === null || lon === null ? null : lon
     })
   }
-  return { ok: true, refreshed: String(data.refreshed || ""), events: events }
+  return { ok: true, refreshed: text(data.refreshed, MAX_SHORT), events: events }
 }
 
 // weather.json, owned by omarchy-weather-location, and geo.omarchy.org both
-// answer {"name", "latitude", "longitude"}. Missing coordinates mean unknown.
+// answer {"name", "latitude", "longitude"}. A name with no coordinates is a
+// location too (`omarchy-weather-location --set Malibu` writes one, and the
+// Weather panel honours it), just one distances can't be measured from: it
+// comes back with lat and lon null. Nothing usable at all gives null.
 function parseLocation(raw) {
   var data
   try {
@@ -55,11 +74,28 @@ function parseLocation(raw) {
   } catch (e) {
     return null
   }
-  if (!data || typeof data !== "object") return null
-  var lat = parseFloat(data.latitude)
-  var lon = parseFloat(data.longitude)
-  if (isNaN(lat) || isNaN(lon)) return null
-  return { name: String(data.name || ""), lat: lat, lon: lon }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null
+  var name = text(data.name, MAX_SHORT)
+  var lat = coordinate(data.latitude, 90)
+  var lon = coordinate(data.longitude, 180)
+  var located = lat !== null && lon !== null
+  if (!located && !name) return null
+  return { name: name, lat: located ? lat : null, lon: located ? lon : null }
+}
+
+function hasCoordinates(location) {
+  return !!location && location.lat !== null && location.lon !== null
+}
+
+// Settings set with `omarchy bar set` but without --json arrive as text.
+function toBool(value) {
+  return value === true || value === "true"
+}
+
+function clampInt(value, min, max, fallback) {
+  var n = Math.round(Number(value))
+  if (isNaN(n)) return fallback
+  return Math.max(min, Math.min(max, n))
 }
 
 function distanceKm(lat1, lon1, lat2, lon2) {

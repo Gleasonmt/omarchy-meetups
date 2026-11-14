@@ -34,17 +34,31 @@ out=""; prev=""; for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
 cat "$STUB_FILE" > "$out"
 `)
   chmodSync(join(bin, "curl"), 0o755)
+  // od reads the header inside cover.sh's lock, between the download and the
+  // move. This stub notes when two runs are in there at once (mkdir is
+  // atomic), which the lock forbids, and $OD_SLEEP keeps each one there.
+  writeFileSync(join(bin, "od"), `#!/usr/bin/env bash
+if [ -n "\${OD_SLEEP:-}" ]; then
+  mkdir "$STUB_INSIDE" 2>/dev/null || echo overlap >> "$STUB_OVERLAP"
+  sleep "$OD_SLEEP"
+  rmdir "$STUB_INSIDE" 2>/dev/null
+fi
+exec ${spawnSync("bash", ["-c", "command -v od"], { encoding: "utf8" }).stdout.trim()} "$@"
+`)
+  chmodSync(join(bin, "od"), 0o755)
   const dir = join(root, "covers")
   const body = join(root, "body")
-  const run = (bytes, env = {}, age = "10080", name = NAME) => {
+  const overlap = join(root, "overlap")
+  const args = (name, age) => ["-c", `umask 022; exec bash "$0" "$@"`, script, dir, name,
+    "https://omarchy.org/images/meetups/" + name, age, "1000000"]
+  const env = extra => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, STUB_LOG: join(root, "log"), STUB_FILE: body,
+    STUB_INSIDE: join(root, "inside"), STUB_OVERLAP: overlap, ...extra })
+  const run = (bytes, extra = {}, age = "10080", name = NAME) => {
     writeFileSync(body, bytes)
-    return spawnSync("bash", ["-c", `umask 022; exec bash "$0" "$@"`, script, dir, name,
-      "https://omarchy.org/images/meetups/" + name, age, "1000000"], {
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, STUB_LOG: join(root, "log"), STUB_FILE: body, ...env },
-      encoding: "utf8",
-    }).status
+    return spawnSync("bash", args(name, age), { env: env(extra), encoding: "utf8" }).status
   }
-  return { dir, run, file: join(dir, NAME), incoming: join(dir, ".incoming") }
+  const start = (extra = {}) => new Promise(done => spawn("bash", args(NAME, "0"), { env: env(extra) }).on("exit", done))
+  return { dir, run, start, overlap, body, file: join(dir, NAME), incoming: join(dir, ".incoming") }
 }
 
 test("a still WebP of each kind is let through, privately", () => {
@@ -123,4 +137,15 @@ test("refuses a name that isn't a plain .webp file name", () => {
     assert.equal(s.run(vp8(10, 10), {}, "10080", bad), 1, JSON.stringify(bad))
     assert.ok(!existsSync(s.dir) || readdirSync(s.dir).length === 0, JSON.stringify(bad))
   }
+})
+
+test("two bars fetching the same cover never check and move it at the same time", async () => {
+  const s = sandbox()
+  writeFileSync(s.body, vp8(10, 10))
+  const first = s.start({ OD_SLEEP: "0.6" })
+  await new Promise(r => setTimeout(r, 200))
+  const codes = await Promise.all([first, s.start({ OD_SLEEP: "0.6" })])
+  assert.ok(!existsSync(s.overlap), "never two runs between the download and the move")
+  assert.deepEqual(codes, [0, 2], "the second leaves it to the first")
+  assert.deepEqual(readFileSync(s.file), vp8(10, 10))
 })

@@ -7,7 +7,7 @@ time; click it for every upcoming meetup in range, each one a click from its sig
 reminder pops up the day before and on the day, and if nothing is near you, the list shows you how
 to host one.
 
-![The widget in the bar, reading "Tonight"](media/bar.png)
+![The widget in the bar, reading "in 31 days"](media/bar.png)
 
 ```bash
 omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
@@ -15,12 +15,12 @@ omarchy plugin add https://github.com/Gleasonmt/omarchy-meetups --enable
 
 ## What it looks like
 
-The list, with each meetup's cover image, and its settings folded under **Filter options**. It
-wears whatever theme you're using:
+The list, with each meetup's cover image. Its settings fold away under **Filter options** and open
+with a click. It wears whatever theme you're using:
 
-| Tokyo Night | Another theme |
+| The list | Filter options open |
 |---|---|
-| ![The meetups list in Tokyo Night](media/panel-tokyo-night.png) | ![The same list in a yellow theme](media/panel-other-theme.png) |
+| ![The list, headed by Omarchy DFW 002 in Dallas with its skyline cover](media/panel.png) | ![The list with Filter options open: distance, look ahead, units, online meetups and reminders](media/panel-options-open.png) |
 
 What the bar shows:
 

@@ -382,7 +382,9 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(340))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(520))
+    // Tall enough for the list with Filter options open; the panel itself
+    // still keeps to the screen, and scrolls if it must.
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(860))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -492,7 +494,8 @@ Panel {
             rowIndex: root.optionsRow
             glyph: root.optionsOpen ? "\u{f0140}" : "\u{f0142}"
             label: "Filter options"
-            caption: Model.optionsSummary(root.radius, root.unit, root.days, root.includeOnline, root.reminders)
+            // The summary only while closed; open, the rows below say it.
+            caption: root.optionsOpen ? "" : Model.optionsSummary(root.radius, root.unit, root.days, root.includeOnline, root.reminders)
             onActivated: root.activateRow(root.optionsRow)
           }
 

@@ -1,7 +1,7 @@
 // Runs remind.sh with a stub omarchy-notification-send first on PATH: node --test tests/
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, readdirSync, utimesSync, chmodSync } from "node:fs"
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, readdirSync, utimesSync, chmodSync, symlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync, spawn } from "node:child_process"
@@ -106,4 +106,28 @@ test("the record is written before sending: killed mid-send, it is never sent ag
   assert.equal(s.sent().length, 1, "the first attempt reached the sender")
   assert.equal(s.run().status, 0)
   assert.equal(s.sent().length, 1, "no second notification")
+})
+
+test("won't use a state folder another account could plant files in", () => {
+  for (const shared of ["dir", "parent"]) {
+    const s = sandbox()
+    mkdirSync(s.dir, { recursive: true })
+    chmodSync(shared === "dir" ? s.dir : join(s.dir, ".."), 0o777)
+    const victim = join(s.dir, "..", "..", "victim")
+    writeFileSync(victim, "precious")
+    symlinkSync(victim, join(s.dir, ".lock"))
+    assert.equal(s.run().status, 1, shared)
+    assert.equal(readFileSync(victim, "utf8"), "precious")
+    assert.deepEqual(s.sent(), [])
+  }
+})
+
+test("a record that is a planted symlink is never written through", () => {
+  const s = sandbox()
+  mkdirSync(s.dir, { recursive: true, mode: 0o700 })
+  const victim = join(s.dir, "..", "..", "victim")
+  symlinkSync(victim, join(s.dir, KEY))   // dangling: -e is false, so it reaches the write
+  assert.equal(s.run().status, 1)
+  assert.equal(existsSync(victim), false)
+  assert.deepEqual(s.sent(), [])
 })

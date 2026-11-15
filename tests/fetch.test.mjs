@@ -1,7 +1,7 @@
 // Runs fetch.sh with a stub curl first on PATH: node --test tests/
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, readdirSync, utimesSync, chmodSync } from "node:fs"
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, readdirSync, utimesSync, chmodSync, symlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync, spawn } from "node:child_process"
@@ -47,6 +47,7 @@ test("passes the byte cap, https-only and a deadline to curl", () => {
   const args = readFileSync(s.log, "utf8").split("\n")
   assert.equal(args[args.indexOf("--max-filesize") + 1], "4096")
   assert.equal(args[args.indexOf("--proto") + 1], "=https")
+  assert.equal(args[args.indexOf("--proto-redir") + 1], "=https", "a redirect can't leave https either")
   assert.ok(args.includes("--max-time"))
 })
 
@@ -106,4 +107,36 @@ test("the meetup list and the location download at the same time without blockin
   assert.equal(readFileSync(join(s.dir, "location.json"), "utf8"), '{"name":"Here"}')
   await new Promise(r => feed.on("exit", r))
   assert.equal(readFileSync(s.file, "utf8"), "slow")
+})
+
+// Another account controls the cache folder, or the folder above it, and plants
+// a symlink where the lock goes: nothing may be written through it.
+test("won't use a cache folder another account could plant files in", () => {
+  for (const setup of [
+    s => { mkdirSync(s.dir); chmodSync(s.dir, 0o777) },            // the cache folder itself is shared
+    s => { mkdirSync(s.dir); chmodSync(s.root, 0o777) },           // the folder above it is shared, not sticky
+    s => { const real = join(s.root, "elsewhere"); mkdirSync(real, { mode: 0o700 }); symlinkSync(real, s.dir) },
+  ]) {
+    const s = sandbox()
+    setup(s)
+    const victim = join(s.root, "victim")
+    writeFileSync(victim, "precious")
+    if (!existsSync(join(s.dir, ".meetups.json.lock"))) { try { symlinkSync(victim, join(s.dir, ".meetups.json.lock")) } catch {} }
+    assert.equal(s.run().status, 1)
+    assert.equal(readFileSync(victim, "utf8"), "precious")
+    assert.equal(existsSync(s.log), false, "curl never ran")
+    chmodSync(s.root, 0o700)
+  }
+})
+
+test("a sticky shared folder above is fine, and a lock that is a symlink is never emptied", () => {
+  const s = sandbox()
+  chmodSync(s.root, 0o1777)
+  mkdirSync(s.dir, { mode: 0o700 })
+  const victim = join(s.root, "victim")
+  writeFileSync(victim, "precious")
+  symlinkSync(victim, join(s.dir, ".meetups.json.lock"))
+  assert.equal(s.run().status, 0)
+  assert.equal(readFileSync(victim, "utf8"), "precious")
+  chmodSync(s.root, 0o700)
 })

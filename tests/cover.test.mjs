@@ -2,7 +2,7 @@
 // bytes in $STUB_FILE: node --test tests/
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, readdirSync, utimesSync, chmodSync } from "node:fs"
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, readdirSync, utimesSync, chmodSync, symlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync, spawn } from "node:child_process"
@@ -148,4 +148,26 @@ test("two bars fetching the same cover never check and move it at the same time"
   assert.ok(!existsSync(s.overlap), "never two runs between the download and the move")
   assert.deepEqual(codes, [0, 2], "the second leaves it to the first")
   assert.deepEqual(readFileSync(s.file), vp8(10, 10))
+})
+
+test("won't use a covers folder another account could plant files in", () => {
+  const s = sandbox()
+  mkdirSync(s.incoming, { recursive: true })
+  chmodSync(s.dir, 0o777)
+  const victim = join(s.dir, "..", "victim")
+  writeFileSync(victim, "precious")
+  symlinkSync(victim, join(s.dir, `.${NAME}.cover.lock`))
+  assert.equal(s.run(vp8(800, 450)), 1)
+  assert.equal(readFileSync(victim, "utf8"), "precious")
+  assert.equal(existsSync(s.file), false)
+})
+
+test("a cover lock that is a symlink is never emptied", () => {
+  const s = sandbox()
+  mkdirSync(s.incoming, { recursive: true, mode: 0o700 })
+  const victim = join(s.dir, "..", "victim")
+  writeFileSync(victim, "precious")
+  symlinkSync(victim, join(s.dir, `.${NAME}.cover.lock`))
+  assert.equal(s.run(vp8(800, 450)), 0)
+  assert.equal(readFileSync(victim, "utf8"), "precious")
 })

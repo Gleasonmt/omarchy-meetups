@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "gleasonmt.meetups",
   "name": "Omarchy Meetups",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Gleasonmt",
   "license": "MIT",
   "description": "The next Omarchy meetup near you in the bar, within the distance and time window you choose, with every upcoming one a click away.",
